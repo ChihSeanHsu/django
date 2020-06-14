@@ -60,6 +60,11 @@ class TwoFields(models.Model):
     f2 = models.IntegerField(unique=True)
 
 
+class UpsertConflict(models.Model):
+    unique_field = models.IntegerField(unique=True)
+    will_update = models.BooleanField()
+
+
 class NoFields(models.Model):
     pass
 

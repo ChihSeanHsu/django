@@ -1361,6 +1361,10 @@ class SQLInsertCompiler(SQLCompiler):
         ignore_conflicts_suffix_sql = self.connection.ops.ignore_conflicts_suffix_sql(
             ignore_conflicts=self.query.ignore_conflicts
         )
+        upsert_conflicts_suffix_sql = self.connection.ops.upsert_conflicts_suffix_sql(
+            fields,
+            upsert_conflicts=self.query.upsert_conflicts
+        )
         if self.returning_fields and self.connection.features.can_return_columns_from_insert:
             if self.connection.features.can_return_rows_from_bulk_insert:
                 result.append(self.connection.ops.bulk_insert_sql(fields, placeholder_rows))
@@ -1370,6 +1374,8 @@ class SQLInsertCompiler(SQLCompiler):
                 params = [param_rows[0]]
             if ignore_conflicts_suffix_sql:
                 result.append(ignore_conflicts_suffix_sql)
+            if upsert_conflicts_suffix_sql:
+                result.append(upsert_conflicts_suffix_sql)
             # Skip empty r_sql to allow subclasses to customize behavior for
             # 3rd party backends. Refs #19096.
             r_sql, self.returning_params = self.connection.ops.return_insert_columns(self.returning_fields)
@@ -1382,10 +1388,14 @@ class SQLInsertCompiler(SQLCompiler):
             result.append(self.connection.ops.bulk_insert_sql(fields, placeholder_rows))
             if ignore_conflicts_suffix_sql:
                 result.append(ignore_conflicts_suffix_sql)
+            if upsert_conflicts_suffix_sql:
+                result.append(upsert_conflicts_suffix_sql)
             return [(" ".join(result), tuple(p for ps in param_rows for p in ps))]
         else:
             if ignore_conflicts_suffix_sql:
                 result.append(ignore_conflicts_suffix_sql)
+            if upsert_conflicts_suffix_sql:
+                result.append(upsert_conflicts_suffix_sql)
             return [
                 (" ".join(result + ["VALUES (%s)" % ", ".join(p)]), vals)
                 for p, vals in zip(placeholder_rows, param_rows)

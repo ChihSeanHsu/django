@@ -11,7 +11,7 @@ from django.test import (
 from .models import (
     BigAutoFieldModel, Country, NoFields, NullableFields, Pizzeria,
     ProxyCountry, ProxyMultiCountry, ProxyMultiProxyCountry, ProxyProxyCountry,
-    Restaurant, SmallAutoFieldModel, State, TwoFields,
+    Restaurant, SmallAutoFieldModel, State, TwoFields, UpsertConflict
 )
 
 
@@ -320,3 +320,56 @@ class BulkCreateTests(TestCase):
         # Without ignore_conflicts=True, there's a problem.
         with self.assertRaises(IntegrityError):
             TwoFields.objects.bulk_create(conflicting_objects)
+
+    @skipIfDBFeature('supports_upsert_conflicts')
+    def test_upsert_value_error(self):
+        message = 'This database backend does not support upsert.'
+        with self.assertRaisesMessage(NotSupportedError, message):
+            TwoFields.objects.bulk_create(self.data, upsert_conflicts=True)
+
+    @skipUnlessDBFeature('supports_upsert_conflicts')
+    def test_upsert(self):
+        data = [
+            UpsertConflict(unique_field=1, will_update=False),
+            UpsertConflict(unique_field=2, will_update=False),
+            UpsertConflict(unique_field=3, will_update=False),
+        ]
+        UpsertConflict.objects.bulk_create(data)
+        self.assertEqual(UpsertConflict.objects.count(), 3)
+        # With upsert=True, conflicts are ignored.
+        upsert_objects = [
+            UpsertConflict(unique_field=2, will_update=True),
+            UpsertConflict(unique_field=3, will_update=True),
+        ]
+        UpsertConflict.objects.bulk_create([upsert_objects[0]], upsert_conflicts=True)
+        UpsertConflict.objects.bulk_create(upsert_objects, upsert_conflicts=True)
+        self.assertEqual(UpsertConflict.objects.count(), 3)
+        # if upsert, data will change.
+        for obj in upsert_objects:
+            self.assertIsNone(obj.pk)
+            need_check = UpsertConflict.objects.get(unique_field=obj.unique_field)
+            self.assertEqual(need_check.will_update, obj.will_update)
+
+        # New objects are created and conflicts are ignored.
+        new_object = UpsertConflict(unique_field=4, will_update=False)
+        upsert_objects_2 = [
+            UpsertConflict(unique_field=2, will_update=False),
+            UpsertConflict(unique_field=3, will_update=False),
+        ]
+        UpsertConflict.objects.bulk_create(upsert_objects_2 + [new_object], upsert_conflicts=True)
+        self.assertEqual(UpsertConflict.objects.count(), 4)
+        self.assertIsNone(new_object.pk)
+        self.assertEqual(
+            UpsertConflict.objects.get(unique_field=new_object.unique_field).will_update,
+            new_object.will_update
+        )
+
+        # if upsert, data will change.
+        for obj in upsert_objects_2:
+            self.assertIsNone(obj.pk)
+            need_check = UpsertConflict.objects.get(unique_field=obj.unique_field)
+            self.assertEqual(need_check.will_update, obj.will_update)
+
+        # Without upsert=True, there's a problem.
+        with self.assertRaises(IntegrityError):
+            UpsertConflict.objects.bulk_create(upsert_objects)
