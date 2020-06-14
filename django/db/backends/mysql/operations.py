@@ -375,3 +375,18 @@ class DatabaseOperations(BaseDatabaseOperations):
             ):
                 lookup = 'JSON_UNQUOTE(%s)'
         return lookup
+
+    def upsert_conflicts_suffix_sql(self, fields, upsert_conflicts=None):
+        result = ''
+        if upsert_conflicts:
+            unique_fields = []
+            upsert_fields = []
+            for field in fields:
+                if field.unique and not field.primary_key:
+                    unique_fields.append(field.name)
+                else:
+                    upsert_fields.append(field.name)
+            result = 'ON DUPLICATE KEY UPDATE '
+            result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in upsert_fields])
+        
+        return result
