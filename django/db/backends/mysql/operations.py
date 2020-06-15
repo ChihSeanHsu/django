@@ -2,6 +2,9 @@ import uuid
 
 from django.conf import settings
 from django.db.backends.base.operations import BaseDatabaseOperations
+from django.db.models.constants import (
+    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPSERT,
+)
 from django.utils import timezone
 from django.utils.duration import duration_microseconds
 from django.utils.encoding import force_str
@@ -363,8 +366,12 @@ class DatabaseOperations(BaseDatabaseOperations):
         match_option = 'c' if lookup_type == 'regex' else 'i'
         return "REGEXP_LIKE(%%s, %%s, '%s')" % match_option
 
-    def insert_statement(self, ignore_conflicts=False, upsert_conflicts=False):
-        return 'INSERT IGNORE INTO' if ignore_conflicts else super().insert_statement(ignore_conflicts)
+    def insert_statement(self, conflicts_plan=CONFLICTS_PLAN_NONE):
+        if conflicts_plan == CONFLICTS_PLAN_IGNORE:
+            result = 'INSERT IGNORE INTO'
+        else:
+            result = super().insert_statement(conflicts_plan)
+        return result
 
     def lookup_cast(self, lookup_type, internal_type=None):
         lookup = '%s'
@@ -376,9 +383,9 @@ class DatabaseOperations(BaseDatabaseOperations):
                 lookup = 'JSON_UNQUOTE(%s)'
         return lookup
 
-    def upsert_conflicts_suffix_sql(self, fields, upsert_conflicts=None):
+    def conflicts_suffix_sql(self, fields, conflicts_plan=CONFLICTS_PLAN_NONE):
         result = ''
-        if upsert_conflicts:
+        if conflicts_plan == CONFLICTS_PLAN_UPSERT:
             unique_fields = []
             upsert_fields = []
             for field in fields:
@@ -389,4 +396,4 @@ class DatabaseOperations(BaseDatabaseOperations):
             result = 'ON DUPLICATE KEY UPDATE '
             result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in upsert_fields])
 
-        return result
+        return result if result else super().conflicts_suffix_sql(fields, conflicts_plan=conflicts_plan)

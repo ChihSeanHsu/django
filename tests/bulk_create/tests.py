@@ -289,7 +289,7 @@ class BulkCreateTests(TestCase):
 
     @skipIfDBFeature('supports_ignore_conflicts')
     def test_ignore_conflicts_value_error(self):
-        message = 'This database backend does not support ignoring conflicts.'
+        message = 'This database backend does not support ignore conflicts.'
         with self.assertRaisesMessage(NotSupportedError, message):
             TwoFields.objects.bulk_create(self.data, ignore_conflicts=True)
 
@@ -373,3 +373,14 @@ class BulkCreateTests(TestCase):
         # Without upsert=True, there's a problem.
         with self.assertRaises(IntegrityError):
             UpsertConflict.objects.bulk_create(upsert_objects)
+
+    @skipIfDBFeature('supports_upsert_conflicts')
+    @skipIfDBFeature('supports_ignore_conflicts')
+    def test_bulk_create_conflicts_plan_conflict(self):
+        message = 'You can only assign one conflicts plan, ignore_conflicts or upsert_conflicts'
+        with self.assertRaisesMessage(ValueError, message):
+            TwoFields.objects.bulk_create(
+                self.data,
+                ignore_conflicts=True,
+                upsert_conflicts=True
+            )

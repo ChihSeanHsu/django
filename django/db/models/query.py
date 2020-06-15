@@ -17,7 +17,10 @@ from django.db import (
     router, transaction,
 )
 from django.db.models import AutoField, DateField, DateTimeField, sql
-from django.db.models.constants import LOOKUP_SEP
+from django.db.models.constants import (
+    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPSERT,
+    LOOKUP_SEP,
+)
 from django.db.models.deletion import Collector
 from django.db.models.expressions import Case, Expression, F, Value, When
 from django.db.models.functions import Cast, Trunc
@@ -452,6 +455,18 @@ class QuerySet:
             if obj.pk is None:
                 obj.pk = obj._meta.pk.get_pk_value_on_save(obj)
 
+    def _select_conflicts_plan(self, ignore_conflicts=False, upsert_conflicts=False):
+        if ignore_conflicts and upsert_conflicts:
+            raise ValueError(
+                'You can only assign one conflicts plan, ignore_conflicts or upsert_conflicts'
+            )
+        result = CONFLICTS_PLAN_NONE
+        if ignore_conflicts:
+            result = CONFLICTS_PLAN_IGNORE
+        elif upsert_conflicts:
+            result = CONFLICTS_PLAN_UPSERT
+        return result
+
     def bulk_create(self, objs, batch_size=None, ignore_conflicts=False, upsert_conflicts=False):
         """
         Insert each of the instances into the database. Do *not* call
@@ -482,6 +497,9 @@ class QuerySet:
                 raise ValueError("Can't bulk create a multi-table inherited model")
         if not objs:
             return objs
+        conflicts_plan = self._select_conflicts_plan(
+            ignore_conflicts=ignore_conflicts, upsert_conflicts=upsert_conflicts
+        )
         self._for_write = True
         connection = connections[self.db]
         opts = self.model._meta
@@ -495,8 +513,7 @@ class QuerySet:
                     objs_with_pk,
                     fields,
                     batch_size,
-                    ignore_conflicts=ignore_conflicts,
-                    upsert_conflicts=upsert_conflicts
+                    conflicts_plan=conflicts_plan,
                 )
                 for obj_with_pk, results in zip(objs_with_pk, returned_columns):
                     for result, field in zip(results, opts.db_returning_fields):
@@ -511,13 +528,11 @@ class QuerySet:
                     objs_without_pk,
                     fields,
                     batch_size,
-                    ignore_conflicts=ignore_conflicts,
-                    upsert_conflicts=upsert_conflicts
+                    conflicts_plan=conflicts_plan,
                 )
                 if (
                     connection.features.can_return_rows_from_bulk_insert and
-                    not ignore_conflicts and
-                    not upsert_conflicts
+                    conflicts_plan == CONFLICTS_PLAN_NONE
                 ):
                     assert len(returned_columns) == len(objs_without_pk)
                 for obj_without_pk, results in zip(objs_without_pk, returned_columns):
@@ -1252,7 +1267,7 @@ class QuerySet:
 
     def _insert(
         self, objs, fields, returning_fields=None,
-        raw=False, using=None, ignore_conflicts=False, upsert_conflicts=False
+        raw=False, using=None, conflicts_plan=CONFLICTS_PLAN_NONE
     ):
         """
         Insert a new record for the given model. This provides an interface to
@@ -1261,39 +1276,44 @@ class QuerySet:
         self._for_write = True
         if using is None:
             using = self.db
-        query = sql.InsertQuery(self.model, ignore_conflicts=ignore_conflicts, upsert_conflicts=upsert_conflicts)
+        query = sql.InsertQuery(self.model, conflicts_plan=conflicts_plan)
         query.insert_values(fields, objs, raw=raw)
         return query.get_compiler(using=using).execute_sql(returning_fields)
     _insert.alters_data = True
     _insert.queryset_only = False
 
-    def _batched_insert(self, objs, fields, batch_size, ignore_conflicts=False, upsert_conflicts=False):
+    def _check_conflicts_plan_supported(self, conflicts_plan):
+        feature_flag_mapping = {
+            CONFLICTS_PLAN_IGNORE: 'supports_ignore_conflicts',
+            CONFLICTS_PLAN_UPSERT: 'supports_upsert_conflicts'
+        }
+        feature = feature_flag_mapping.get(conflicts_plan)
+        if feature and not getattr(connections[self.db].features, feature):
+            raise NotSupportedError(
+                'This database backend does not support %s conflicts.' % (feature)
+            )
+
+    def _batched_insert(self, objs, fields, batch_size, conflicts_plan=CONFLICTS_PLAN_NONE):
         """
         Helper method for bulk_create() to insert objs one batch at a time.
         """
-        if ignore_conflicts and not connections[self.db].features.supports_ignore_conflicts:
-            raise NotSupportedError('This database backend does not support ignoring conflicts.')
-        if upsert_conflicts and not connections[self.db].features.supports_upsert_conflicts:
-            raise NotSupportedError('This database backend does not support upsert conflicts.')
-
+        self._check_conflicts_plan_supported(conflicts_plan)
         ops = connections[self.db].ops
         max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
         batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
         inserted_rows = []
         bulk_return = connections[self.db].features.can_return_rows_from_bulk_insert
         for item in [objs[i:i + batch_size] for i in range(0, len(objs), batch_size)]:
-            if bulk_return and not ignore_conflicts and not upsert_conflicts:
+            if bulk_return and not conflicts_plan:
                 inserted_rows.extend(self._insert(
                     item, fields=fields, using=self.db,
                     returning_fields=self.model._meta.db_returning_fields,
-                    ignore_conflicts=ignore_conflicts,
-                    upsert_conflicts=upsert_conflicts,
+                    conflicts_plan=conflicts_plan,
                 ))
             else:
                 self._insert(
                     item, fields=fields, using=self.db,
-                    ignore_conflicts=ignore_conflicts,
-                    upsert_conflicts=upsert_conflicts
+                    conflicts_plan=conflicts_plan
                 )
         return inserted_rows
 
