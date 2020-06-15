@@ -14,6 +14,8 @@ from django.utils.dateparse import parse_date, parse_datetime, parse_time
 from django.utils.duration import duration_microseconds
 from django.utils.functional import cached_property
 
+from .base import Database
+
 
 class DatabaseOperations(BaseDatabaseOperations):
     cast_char_field_without_max_length = 'text'
@@ -356,5 +358,24 @@ class DatabaseOperations(BaseDatabaseOperations):
             return 'django_time_diff(%s, %s)' % (lhs_sql, rhs_sql), params
         return 'django_timestamp_diff(%s, %s)' % (lhs_sql, rhs_sql), params
 
-    def insert_statement(self, ignore_conflicts=False):
-        return 'INSERT OR IGNORE INTO' if ignore_conflicts else super().insert_statement(ignore_conflicts)
+    def insert_statement(self, ignore_conflicts=False, upsert_conflicts=False):
+        result = ''
+        if ignore_conflicts:
+            result = 'INSERT OR IGNORE INTO'
+        elif upsert_conflicts and Database.sqlite_version_info < (3, 24, 0):
+            result = 'INSERT OR REPLACE INTO'
+        return result if result else super().insert_statement(ignore_conflicts)
+
+    def upsert_conflicts_suffix_sql(self, fields, upsert_conflicts=None):
+        result = ''
+        if upsert_conflicts and Database.sqlite_version_info >= (3, 24, 0):
+            unique_fields = []
+            upsert_fields = []
+            for field in fields:
+                if field.unique and not field.primary_key:
+                    unique_fields.append(field.name)
+                else:
+                    upsert_fields.append(field.name)
+            result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
+            result += ', '.join(['%s=excluded.%s' % (field, field) for field in upsert_fields])
+        return result

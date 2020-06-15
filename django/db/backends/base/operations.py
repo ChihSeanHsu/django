@@ -697,23 +697,11 @@ class BaseDatabaseOperations:
             raise ValueError('Unknown options: %s' % ', '.join(sorted(options.keys())))
         return self.explain_prefix
 
-    def insert_statement(self, ignore_conflicts=False):
+    def insert_statement(self, ignore_conflicts=False, upsert_conflicts=False):
         return 'INSERT INTO'
 
     def ignore_conflicts_suffix_sql(self, ignore_conflicts=None):
         return ''
 
     def upsert_conflicts_suffix_sql(self, fields, upsert_conflicts=None):
-        result = ''
-        if upsert_conflicts:
-            unique_fields = []
-            upsert_fields = []
-            for field in fields:
-                if field.unique and not field.primary_key:
-                    unique_fields.append(field.name)
-                else:
-                    upsert_fields.append(field.name)
-            result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
-            result += ', '.join(['%s=excluded.%s' % (field, field) for field in upsert_fields])
-
-        return result
+        return ''

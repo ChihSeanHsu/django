@@ -363,7 +363,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         match_option = 'c' if lookup_type == 'regex' else 'i'
         return "REGEXP_LIKE(%%s, %%s, '%s')" % match_option
 
-    def insert_statement(self, ignore_conflicts=False):
+    def insert_statement(self, ignore_conflicts=False, upsert_conflicts=False):
         return 'INSERT IGNORE INTO' if ignore_conflicts else super().insert_statement(ignore_conflicts)
 
     def lookup_cast(self, lookup_type, internal_type=None):

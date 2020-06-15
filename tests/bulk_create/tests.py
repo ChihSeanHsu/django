@@ -346,7 +346,7 @@ class BulkCreateTests(TestCase):
         self.assertEqual(UpsertConflict.objects.count(), 3)
         # if upsert, data will change.
         for obj in upsert_objects:
-            # self.assertIsNone(obj.pk)
+            self.assertIsNone(obj.pk)
             need_check = UpsertConflict.objects.get(unique_field=obj.unique_field)
             self.assertEqual(need_check.will_update, obj.will_update)
 

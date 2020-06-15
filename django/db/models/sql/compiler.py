@@ -1335,7 +1335,10 @@ class SQLInsertCompiler(SQLCompiler):
         # going to be column names (so we can avoid the extra overhead).
         qn = self.connection.ops.quote_name
         opts = self.query.get_meta()
-        insert_statement = self.connection.ops.insert_statement(ignore_conflicts=self.query.ignore_conflicts)
+        insert_statement = self.connection.ops.insert_statement(
+            ignore_conflicts=self.query.ignore_conflicts,
+            upsert_conflicts=self.query.upsert_conflicts
+        )
         result = ['%s %s' % (insert_statement, qn(opts.db_table))]
         fields = self.query.fields or [opts.pk]
         result.append('(%s)' % ', '.join(qn(f.column) for f in fields))
