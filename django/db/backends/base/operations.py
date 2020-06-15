@@ -715,5 +715,5 @@ class BaseDatabaseOperations:
                     upsert_fields.append(field.name)
             result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
             result += ', '.join(['%s=excluded.%s' % (field, field) for field in upsert_fields])
-        
+
         return result

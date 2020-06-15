@@ -388,5 +388,5 @@ class DatabaseOperations(BaseDatabaseOperations):
                     upsert_fields.append(field.name)
             result = 'ON DUPLICATE KEY UPDATE '
             result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in upsert_fields])
-        
+
         return result

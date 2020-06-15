@@ -492,9 +492,9 @@ class QuerySet:
             objs_with_pk, objs_without_pk = partition(lambda o: o.pk is None, objs)
             if objs_with_pk:
                 returned_columns = self._batched_insert(
-                    objs_with_pk, 
-                    fields, 
-                    batch_size, 
+                    objs_with_pk,
+                    fields,
+                    batch_size,
                     ignore_conflicts=ignore_conflicts,
                     upsert_conflicts=upsert_conflicts
                 )
@@ -508,13 +508,17 @@ class QuerySet:
             if objs_without_pk:
                 fields = [f for f in fields if not isinstance(f, AutoField)]
                 returned_columns = self._batched_insert(
-                    objs_without_pk, 
-                    fields, 
-                    batch_size, 
+                    objs_without_pk,
+                    fields,
+                    batch_size,
                     ignore_conflicts=ignore_conflicts,
                     upsert_conflicts=upsert_conflicts
                 )
-                if connection.features.can_return_rows_from_bulk_insert and not ignore_conflicts and not upsert_conflicts:
+                if (
+                    connection.features.can_return_rows_from_bulk_insert and
+                    not ignore_conflicts and
+                    not upsert_conflicts
+                ):
                     assert len(returned_columns) == len(objs_without_pk)
                 for obj_without_pk, results in zip(objs_without_pk, returned_columns):
                     for result, field in zip(results, opts.db_returning_fields):
@@ -1246,7 +1250,10 @@ class QuerySet:
     # PRIVATE METHODS #
     ###################
 
-    def _insert(self, objs, fields, returning_fields=None, raw=False, using=None, ignore_conflicts=False, upsert_conflicts=False):
+    def _insert(
+        self, objs, fields, returning_fields=None,
+        raw=False, using=None, ignore_conflicts=False, upsert_conflicts=False
+    ):
         """
         Insert a new record for the given model. This provides an interface to
         the InsertQuery class and is how Model.save() is implemented.
@@ -1284,7 +1291,7 @@ class QuerySet:
                 ))
             else:
                 self._insert(
-                    item, fields=fields, using=self.db, 
+                    item, fields=fields, using=self.db,
                     ignore_conflicts=ignore_conflicts,
                     upsert_conflicts=upsert_conflicts
                 )
