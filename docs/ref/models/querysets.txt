@@ -2073,7 +2073,7 @@ exists in the database, an :exc:`~django.db.IntegrityError` is raised.
 ``bulk_create()``
 ~~~~~~~~~~~~~~~~~
 
-.. method:: bulk_create(objs, batch_size=None, ignore_conflicts=False)
+.. method:: bulk_create(objs, batch_size=None, ignore_conflicts=False, upsert_conflicts=False)
 
 This method inserts the provided list of objects into the database in an
 efficient manner (generally only 1 query, no matter how many objects there
@@ -2114,10 +2114,10 @@ query. The default is to create all objects in one batch, except for SQLite
 where the default is such that at most 999 variables per query are used.
 
 On databases that support it (all but Oracle), setting the ``ignore_conflicts``
-parameter to ``True`` tells the database to ignore failure to insert any rows
-that fail constraints such as duplicate unique values. Enabling this parameter
-disables setting the primary key on each model instance (if the database
-normally supports it).
+or ``upsert_conflicts`` parameter to ``True`` tells the database to ignore failure
+or upsert to insert any rows that fail constraints such as duplicate unique values. 
+Enabling this parameter disables setting the primary key on each model instance 
+(if the database normally supports it).
 
 Returns ``objs`` as cast to a list, in the same order as provided.
 
