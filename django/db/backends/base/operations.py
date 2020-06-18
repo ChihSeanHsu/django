@@ -697,8 +697,8 @@ class BaseDatabaseOperations:
             raise ValueError('Unknown options: %s' % ', '.join(sorted(options.keys())))
         return self.explain_prefix
 
-    def insert_statement(self, conflicts_plan=None):
+    def insert_statement(self, on_conflicts=None):
         return 'INSERT INTO'
 
-    def conflicts_suffix_sql(self, fields, conflicts_plan=None):
+    def conflicts_suffix_sql(self, fields, on_conflicts=None):
         return ''

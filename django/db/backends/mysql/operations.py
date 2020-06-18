@@ -366,11 +366,11 @@ class DatabaseOperations(BaseDatabaseOperations):
         match_option = 'c' if lookup_type == 'regex' else 'i'
         return "REGEXP_LIKE(%%s, %%s, '%s')" % match_option
 
-    def insert_statement(self, conflicts_plan=CONFLICTS_PLAN_NONE):
-        if conflicts_plan == CONFLICTS_PLAN_IGNORE:
+    def insert_statement(self, on_conflicts=CONFLICTS_PLAN_NONE):
+        if on_conflicts == CONFLICTS_PLAN_IGNORE:
             result = 'INSERT IGNORE INTO'
         else:
-            result = super().insert_statement(conflicts_plan)
+            result = super().insert_statement(on_conflicts)
         return result
 
     def lookup_cast(self, lookup_type, internal_type=None):
@@ -383,9 +383,9 @@ class DatabaseOperations(BaseDatabaseOperations):
                 lookup = 'JSON_UNQUOTE(%s)'
         return lookup
 
-    def conflicts_suffix_sql(self, fields, conflicts_plan=CONFLICTS_PLAN_NONE):
+    def conflicts_suffix_sql(self, fields, on_conflicts=CONFLICTS_PLAN_NONE):
         result = ''
-        if conflicts_plan == CONFLICTS_PLAN_UPDATE:
+        if on_conflicts == CONFLICTS_PLAN_UPDATE:
             unique_fields = []
             update_fields = []
             for field in fields:
@@ -396,4 +396,4 @@ class DatabaseOperations(BaseDatabaseOperations):
             result = 'ON DUPLICATE KEY UPDATE '
             result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in update_fields])
 
-        return result if result else super().conflicts_suffix_sql(fields, conflicts_plan=conflicts_plan)
+        return result if result else super().conflicts_suffix_sql(fields, on_conflicts=on_conflicts)

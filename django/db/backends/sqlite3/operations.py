@@ -361,17 +361,17 @@ class DatabaseOperations(BaseDatabaseOperations):
             return 'django_time_diff(%s, %s)' % (lhs_sql, rhs_sql), params
         return 'django_timestamp_diff(%s, %s)' % (lhs_sql, rhs_sql), params
 
-    def insert_statement(self, conflicts_plan=CONFLICTS_PLAN_NONE):
+    def insert_statement(self, on_conflicts=CONFLICTS_PLAN_NONE):
         result = ''
-        if conflicts_plan == CONFLICTS_PLAN_IGNORE:
+        if on_conflicts == CONFLICTS_PLAN_IGNORE:
             result = 'INSERT OR IGNORE INTO'
-        elif conflicts_plan == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info < (3, 24, 0):
+        elif on_conflicts == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info < (3, 24, 0):
             result = 'INSERT OR REPLACE INTO'
-        return result if result else super().insert_statement(conflicts_plan=conflicts_plan)
+        return result if result else super().insert_statement(on_conflicts=on_conflicts)
 
-    def conflicts_suffix_sql(self, fields, conflicts_plan=CONFLICTS_PLAN_NONE):
+    def conflicts_suffix_sql(self, fields, on_conflicts=CONFLICTS_PLAN_NONE):
         result = ''
-        if conflicts_plan == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info >= (3, 24, 0):
+        if on_conflicts == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info >= (3, 24, 0):
             unique_fields = []
             update_fields = []
             for field in fields:
@@ -381,4 +381,4 @@ class DatabaseOperations(BaseDatabaseOperations):
                     update_fields.append(field.name)
             result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
             result += ', '.join(['%s=excluded.%s' % (field, field) for field in update_fields])
-        return result if result else super().conflicts_suffix_sql(fields, conflicts_plan=conflicts_plan)
+        return result if result else super().conflicts_suffix_sql(fields, on_conflicts=on_conflicts)

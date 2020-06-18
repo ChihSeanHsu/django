@@ -376,7 +376,7 @@ class BulkCreateTests(TestCase):
 
     @skipIfDBFeature('supports_update_conflicts')
     @skipIfDBFeature('supports_ignore_conflicts')
-    def test_bulk_create_conflicts_plan_conflict(self):
+    def test_bulk_create_on_conflicts_conflict(self):
         message = 'You can only assign one conflicts plan, ignore_conflicts or update_conflicts'
         with self.assertRaisesMessage(ValueError, message):
             TwoFields.objects.bulk_create(

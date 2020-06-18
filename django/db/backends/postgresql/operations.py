@@ -287,11 +287,11 @@ class DatabaseOperations(BaseDatabaseOperations):
             prefix += ' (%s)' % ', '.join('%s %s' % i for i in extra.items())
         return prefix
 
-    def conflicts_suffix_sql(self, fields, conflicts_plan=CONFLICTS_PLAN_NONE):
+    def conflicts_suffix_sql(self, fields, on_conflicts=CONFLICTS_PLAN_NONE):
         result = ''
-        if conflicts_plan == CONFLICTS_PLAN_IGNORE:
+        if on_conflicts == CONFLICTS_PLAN_IGNORE:
             result = 'ON CONFLICT DO NOTHING'
-        elif conflicts_plan == CONFLICTS_PLAN_UPDATE:
+        elif on_conflicts == CONFLICTS_PLAN_UPDATE:
             unique_fields = []
             update_fields = []
             for field in fields:
@@ -302,4 +302,4 @@ class DatabaseOperations(BaseDatabaseOperations):
             result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
             result += ', '.join(['%s=excluded.%s' % (field, field) for field in update_fields])
 
-        return result if result else super().conflicts_suffix_sql(fields, conflicts_plan=conflicts_plan)
+        return result if result else super().conflicts_suffix_sql(fields, on_conflicts=on_conflicts)

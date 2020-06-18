@@ -1336,7 +1336,7 @@ class SQLInsertCompiler(SQLCompiler):
         qn = self.connection.ops.quote_name
         opts = self.query.get_meta()
         insert_statement = self.connection.ops.insert_statement(
-            conflicts_plan=self.query.conflicts_plan,
+            on_conflicts=self.query.on_conflicts,
         )
         result = ['%s %s' % (insert_statement, qn(opts.db_table))]
         fields = self.query.fields or [opts.pk]
@@ -1361,7 +1361,7 @@ class SQLInsertCompiler(SQLCompiler):
         placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
 
         conflicts_suffix_sql = self.connection.ops.conflicts_suffix_sql(
-            fields, conflicts_plan=self.query.conflicts_plan
+            fields, on_conflicts=self.query.on_conflicts
         )
         if self.returning_fields and self.connection.features.can_return_columns_from_insert:
             if self.connection.features.can_return_rows_from_bulk_insert:
