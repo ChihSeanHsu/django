@@ -18,8 +18,7 @@ from django.db import (
 )
 from django.db.models import AutoField, DateField, DateTimeField, sql
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
-    LOOKUP_SEP,
+    LOOKUP_SEP, ON_CONFLICTS_IGNORE, ON_CONFLICTS_NONE, ON_CONFLICTS_UPDATE,
 )
 from django.db.models.deletion import Collector
 from django.db.models.expressions import Case, Expression, F, Value, When
@@ -460,11 +459,11 @@ class QuerySet:
             raise ValueError(
                 'You can only assign one conflicts plan, ignore_conflicts or update_conflicts'
             )
-        result = CONFLICTS_PLAN_NONE
+        result = ON_CONFLICTS_NONE
         if ignore_conflicts:
-            result = CONFLICTS_PLAN_IGNORE
+            result = ON_CONFLICTS_IGNORE
         elif update_conflicts:
-            result = CONFLICTS_PLAN_UPDATE
+            result = ON_CONFLICTS_UPDATE
         return result
 
     def bulk_create(self, objs, batch_size=None, ignore_conflicts=False, update_conflicts=False):
@@ -532,7 +531,7 @@ class QuerySet:
                 )
                 if (
                     connection.features.can_return_rows_from_bulk_insert and
-                    on_conflicts == CONFLICTS_PLAN_NONE
+                    on_conflicts == ON_CONFLICTS_NONE
                 ):
                     assert len(returned_columns) == len(objs_without_pk)
                 for obj_without_pk, results in zip(objs_without_pk, returned_columns):
@@ -1267,7 +1266,7 @@ class QuerySet:
 
     def _insert(
         self, objs, fields, returning_fields=None,
-        raw=False, using=None, on_conflicts=CONFLICTS_PLAN_NONE
+        raw=False, using=None, on_conflicts=ON_CONFLICTS_NONE
     ):
         """
         Insert a new record for the given model. This provides an interface to
@@ -1284,8 +1283,8 @@ class QuerySet:
 
     def _check_on_conflicts_supported(self, on_conflicts):
         feature_flag_mapping = {
-            CONFLICTS_PLAN_IGNORE: 'supports_ignore_conflicts',
-            CONFLICTS_PLAN_UPDATE: 'supports_update_conflicts'
+            ON_CONFLICTS_IGNORE: 'supports_ignore_conflicts',
+            ON_CONFLICTS_UPDATE: 'supports_update_conflicts'
         }
         feature = feature_flag_mapping.get(on_conflicts)
         if feature and not getattr(connections[self.db].features, feature):
@@ -1293,7 +1292,7 @@ class QuerySet:
                 'This database backend does not support %s conflicts.' % (feature)
             )
 
-    def _batched_insert(self, objs, fields, batch_size, on_conflicts=CONFLICTS_PLAN_NONE):
+    def _batched_insert(self, objs, fields, batch_size, on_conflicts=ON_CONFLICTS_NONE):
         """
         Helper method for bulk_create() to insert objs one batch at a time.
         """

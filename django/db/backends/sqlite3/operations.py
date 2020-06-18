@@ -9,7 +9,7 @@ from django.core.exceptions import FieldError
 from django.db import DatabaseError, NotSupportedError, models
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
+    ON_CONFLICTS_IGNORE, ON_CONFLICTS_NONE, ON_CONFLICTS_UPDATE,
 )
 from django.db.models.expressions import Col
 from django.utils import timezone
@@ -361,17 +361,17 @@ class DatabaseOperations(BaseDatabaseOperations):
             return 'django_time_diff(%s, %s)' % (lhs_sql, rhs_sql), params
         return 'django_timestamp_diff(%s, %s)' % (lhs_sql, rhs_sql), params
 
-    def insert_statement(self, on_conflicts=CONFLICTS_PLAN_NONE):
+    def insert_statement(self, on_conflicts=ON_CONFLICTS_NONE):
         result = ''
-        if on_conflicts == CONFLICTS_PLAN_IGNORE:
+        if on_conflicts == ON_CONFLICTS_IGNORE:
             result = 'INSERT OR IGNORE INTO'
-        elif on_conflicts == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info < (3, 24, 0):
+        elif on_conflicts == ON_CONFLICTS_UPDATE and Database.sqlite_version_info < (3, 24, 0):
             result = 'INSERT OR REPLACE INTO'
         return result if result else super().insert_statement(on_conflicts=on_conflicts)
 
-    def conflicts_suffix_sql(self, fields, on_conflicts=CONFLICTS_PLAN_NONE):
+    def conflicts_suffix_sql(self, fields, on_conflicts=ON_CONFLICTS_NONE):
         result = ''
-        if on_conflicts == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info >= (3, 24, 0):
+        if on_conflicts == ON_CONFLICTS_UPDATE and Database.sqlite_version_info >= (3, 24, 0):
             unique_fields = []
             update_fields = []
             for field in fields:

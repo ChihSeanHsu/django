@@ -3,7 +3,7 @@ import uuid
 from django.conf import settings
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
+    ON_CONFLICTS_IGNORE, ON_CONFLICTS_NONE, ON_CONFLICTS_UPDATE,
 )
 from django.utils import timezone
 from django.utils.duration import duration_microseconds
@@ -366,8 +366,8 @@ class DatabaseOperations(BaseDatabaseOperations):
         match_option = 'c' if lookup_type == 'regex' else 'i'
         return "REGEXP_LIKE(%%s, %%s, '%s')" % match_option
 
-    def insert_statement(self, on_conflicts=CONFLICTS_PLAN_NONE):
-        if on_conflicts == CONFLICTS_PLAN_IGNORE:
+    def insert_statement(self, on_conflicts=ON_CONFLICTS_NONE):
+        if on_conflicts == ON_CONFLICTS_IGNORE:
             result = 'INSERT IGNORE INTO'
         else:
             result = super().insert_statement(on_conflicts)
@@ -383,9 +383,9 @@ class DatabaseOperations(BaseDatabaseOperations):
                 lookup = 'JSON_UNQUOTE(%s)'
         return lookup
 
-    def conflicts_suffix_sql(self, fields, on_conflicts=CONFLICTS_PLAN_NONE):
+    def conflicts_suffix_sql(self, fields, on_conflicts=ON_CONFLICTS_NONE):
         result = ''
-        if on_conflicts == CONFLICTS_PLAN_UPDATE:
+        if on_conflicts == ON_CONFLICTS_UPDATE:
             unique_fields = []
             update_fields = []
             for field in fields:

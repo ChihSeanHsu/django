@@ -3,7 +3,7 @@ Query subclasses which provide extra functionality beyond simple data retrieval.
 """
 
 from django.core.exceptions import FieldError
-from django.db.models.constants import CONFLICTS_PLAN_NONE
+from django.db.models.constants import ON_CONFLICTS_NONE
 from django.db.models.query_utils import Q
 from django.db.models.sql.constants import (
     CURSOR, GET_ITERATOR_CHUNK_SIZE, NO_RESULTS,
@@ -138,7 +138,7 @@ class UpdateQuery(Query):
 class InsertQuery(Query):
     compiler = 'SQLInsertCompiler'
 
-    def __init__(self, *args, on_conflicts=CONFLICTS_PLAN_NONE, **kwargs):
+    def __init__(self, *args, on_conflicts=ON_CONFLICTS_NONE, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = []
         self.objs = []

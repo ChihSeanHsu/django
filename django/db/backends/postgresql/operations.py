@@ -3,7 +3,7 @@ from psycopg2.extras import Inet
 from django.conf import settings
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
+    ON_CONFLICTS_IGNORE, ON_CONFLICTS_NONE, ON_CONFLICTS_UPDATE,
 )
 
 
@@ -287,11 +287,11 @@ class DatabaseOperations(BaseDatabaseOperations):
             prefix += ' (%s)' % ', '.join('%s %s' % i for i in extra.items())
         return prefix
 
-    def conflicts_suffix_sql(self, fields, on_conflicts=CONFLICTS_PLAN_NONE):
+    def conflicts_suffix_sql(self, fields, on_conflicts=ON_CONFLICTS_NONE):
         result = ''
-        if on_conflicts == CONFLICTS_PLAN_IGNORE:
+        if on_conflicts == ON_CONFLICTS_IGNORE:
             result = 'ON CONFLICT DO NOTHING'
-        elif on_conflicts == CONFLICTS_PLAN_UPDATE:
+        elif on_conflicts == ON_CONFLICTS_UPDATE:
             unique_fields = []
             update_fields = []
             for field in fields:
