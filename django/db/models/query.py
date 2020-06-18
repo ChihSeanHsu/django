@@ -18,7 +18,7 @@ from django.db import (
 )
 from django.db.models import AutoField, DateField, DateTimeField, sql
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPSERT,
+    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
     LOOKUP_SEP,
 )
 from django.db.models.deletion import Collector
@@ -455,19 +455,19 @@ class QuerySet:
             if obj.pk is None:
                 obj.pk = obj._meta.pk.get_pk_value_on_save(obj)
 
-    def _select_conflicts_plan(self, ignore_conflicts=False, upsert_conflicts=False):
-        if ignore_conflicts and upsert_conflicts:
+    def _select_conflicts_plan(self, ignore_conflicts=False, update_conflicts=False):
+        if ignore_conflicts and update_conflicts:
             raise ValueError(
-                'You can only assign one conflicts plan, ignore_conflicts or upsert_conflicts'
+                'You can only assign one conflicts plan, ignore_conflicts or update_conflicts'
             )
         result = CONFLICTS_PLAN_NONE
         if ignore_conflicts:
             result = CONFLICTS_PLAN_IGNORE
-        elif upsert_conflicts:
-            result = CONFLICTS_PLAN_UPSERT
+        elif update_conflicts:
+            result = CONFLICTS_PLAN_UPDATE
         return result
 
-    def bulk_create(self, objs, batch_size=None, ignore_conflicts=False, upsert_conflicts=False):
+    def bulk_create(self, objs, batch_size=None, ignore_conflicts=False, update_conflicts=False):
         """
         Insert each of the instances into the database. Do *not* call
         save() on each of the instances, do not send any pre/post_save
@@ -498,7 +498,7 @@ class QuerySet:
         if not objs:
             return objs
         conflicts_plan = self._select_conflicts_plan(
-            ignore_conflicts=ignore_conflicts, upsert_conflicts=upsert_conflicts
+            ignore_conflicts=ignore_conflicts, update_conflicts=update_conflicts
         )
         self._for_write = True
         connection = connections[self.db]
@@ -1285,7 +1285,7 @@ class QuerySet:
     def _check_conflicts_plan_supported(self, conflicts_plan):
         feature_flag_mapping = {
             CONFLICTS_PLAN_IGNORE: 'supports_ignore_conflicts',
-            CONFLICTS_PLAN_UPSERT: 'supports_upsert_conflicts'
+            CONFLICTS_PLAN_UPDATE: 'supports_update_conflicts'
         }
         feature = feature_flag_mapping.get(conflicts_plan)
         if feature and not getattr(connections[self.db].features, feature):

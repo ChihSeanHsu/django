@@ -271,7 +271,7 @@ class BaseDatabaseFeatures:
     supports_ignore_conflicts = True
 
     # Does the backend support ON CONFLICT DO UPDATE during INSERT?
-    supports_upsert_conflicts = True
+    supports_update_conflicts = True
 
     # Does this backend require casting the results of CASE expressions used
     # in UPDATE statements to ensure the expression has the correct type?

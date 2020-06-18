@@ -321,14 +321,14 @@ class BulkCreateTests(TestCase):
         with self.assertRaises(IntegrityError):
             TwoFields.objects.bulk_create(conflicting_objects)
 
-    @skipIfDBFeature('supports_upsert_conflicts')
-    def test_upsert_value_error(self):
-        message = 'This database backend does not support upsert.'
+    @skipIfDBFeature('supports_update_conflicts')
+    def test_update_value_error(self):
+        message = 'This database backend does not support update.'
         with self.assertRaisesMessage(NotSupportedError, message):
-            TwoFields.objects.bulk_create(self.data, upsert_conflicts=True)
+            TwoFields.objects.bulk_create(self.data, update_conflicts=True)
 
-    @skipUnlessDBFeature('supports_upsert_conflicts')
-    def test_upsert(self):
+    @skipUnlessDBFeature('supports_update_conflicts')
+    def test_update(self):
         data = [
             UpsertConflict(unique_field=1, will_update=False),
             UpsertConflict(unique_field=2, will_update=False),
@@ -336,27 +336,27 @@ class BulkCreateTests(TestCase):
         ]
         UpsertConflict.objects.bulk_create(data)
         self.assertEqual(UpsertConflict.objects.count(), 3)
-        # With upsert=True, conflicts are ignored.
-        upsert_objects = [
+        # With update=True, conflicts are ignored.
+        update_objects = [
             UpsertConflict(unique_field=2, will_update=True),
             UpsertConflict(unique_field=3, will_update=True),
         ]
-        UpsertConflict.objects.bulk_create([upsert_objects[0]], upsert_conflicts=True)
-        UpsertConflict.objects.bulk_create(upsert_objects, upsert_conflicts=True)
+        UpsertConflict.objects.bulk_create([update_objects[0]], update_conflicts=True)
+        UpsertConflict.objects.bulk_create(update_objects, update_conflicts=True)
         self.assertEqual(UpsertConflict.objects.count(), 3)
-        # if upsert, data will change.
-        for obj in upsert_objects:
+        # if update, data will change.
+        for obj in update_objects:
             self.assertIsNone(obj.pk)
             need_check = UpsertConflict.objects.get(unique_field=obj.unique_field)
             self.assertEqual(need_check.will_update, obj.will_update)
 
         # New objects are created and conflicts are ignored.
         new_object = UpsertConflict(unique_field=4, will_update=False)
-        upsert_objects_2 = [
+        update_objects_2 = [
             UpsertConflict(unique_field=2, will_update=False),
             UpsertConflict(unique_field=3, will_update=False),
         ]
-        UpsertConflict.objects.bulk_create(upsert_objects_2 + [new_object], upsert_conflicts=True)
+        UpsertConflict.objects.bulk_create(update_objects_2 + [new_object], update_conflicts=True)
         self.assertEqual(UpsertConflict.objects.count(), 4)
         self.assertIsNone(new_object.pk)
         self.assertEqual(
@@ -364,23 +364,23 @@ class BulkCreateTests(TestCase):
             new_object.will_update
         )
 
-        # if upsert, data will change.
-        for obj in upsert_objects_2:
+        # if update, data will change.
+        for obj in update_objects_2:
             self.assertIsNone(obj.pk)
             need_check = UpsertConflict.objects.get(unique_field=obj.unique_field)
             self.assertEqual(need_check.will_update, obj.will_update)
 
-        # Without upsert=True, there's a problem.
+        # Without update=True, there's a problem.
         with self.assertRaises(IntegrityError):
-            UpsertConflict.objects.bulk_create(upsert_objects)
+            UpsertConflict.objects.bulk_create(update_objects)
 
-    @skipIfDBFeature('supports_upsert_conflicts')
+    @skipIfDBFeature('supports_update_conflicts')
     @skipIfDBFeature('supports_ignore_conflicts')
     def test_bulk_create_conflicts_plan_conflict(self):
-        message = 'You can only assign one conflicts plan, ignore_conflicts or upsert_conflicts'
+        message = 'You can only assign one conflicts plan, ignore_conflicts or update_conflicts'
         with self.assertRaisesMessage(ValueError, message):
             TwoFields.objects.bulk_create(
                 self.data,
                 ignore_conflicts=True,
-                upsert_conflicts=True
+                update_conflicts=True
             )

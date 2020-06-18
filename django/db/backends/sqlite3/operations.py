@@ -9,7 +9,7 @@ from django.core.exceptions import FieldError
 from django.db import DatabaseError, NotSupportedError, models
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPSERT,
+    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
 )
 from django.db.models.expressions import Col
 from django.utils import timezone
@@ -365,20 +365,20 @@ class DatabaseOperations(BaseDatabaseOperations):
         result = ''
         if conflicts_plan == CONFLICTS_PLAN_IGNORE:
             result = 'INSERT OR IGNORE INTO'
-        elif conflicts_plan == CONFLICTS_PLAN_UPSERT and Database.sqlite_version_info < (3, 24, 0):
+        elif conflicts_plan == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info < (3, 24, 0):
             result = 'INSERT OR REPLACE INTO'
         return result if result else super().insert_statement(conflicts_plan=conflicts_plan)
 
     def conflicts_suffix_sql(self, fields, conflicts_plan=CONFLICTS_PLAN_NONE):
         result = ''
-        if conflicts_plan == CONFLICTS_PLAN_UPSERT and Database.sqlite_version_info >= (3, 24, 0):
+        if conflicts_plan == CONFLICTS_PLAN_UPDATE and Database.sqlite_version_info >= (3, 24, 0):
             unique_fields = []
-            upsert_fields = []
+            update_fields = []
             for field in fields:
                 if field.unique and not field.primary_key:
                     unique_fields.append(field.name)
                 else:
-                    upsert_fields.append(field.name)
+                    update_fields.append(field.name)
             result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
-            result += ', '.join(['%s=excluded.%s' % (field, field) for field in upsert_fields])
+            result += ', '.join(['%s=excluded.%s' % (field, field) for field in update_fields])
         return result if result else super().conflicts_suffix_sql(fields, conflicts_plan=conflicts_plan)

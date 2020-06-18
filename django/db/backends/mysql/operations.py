@@ -3,7 +3,7 @@ import uuid
 from django.conf import settings
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.models.constants import (
-    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPSERT,
+    CONFLICTS_PLAN_IGNORE, CONFLICTS_PLAN_NONE, CONFLICTS_PLAN_UPDATE,
 )
 from django.utils import timezone
 from django.utils.duration import duration_microseconds
@@ -385,15 +385,15 @@ class DatabaseOperations(BaseDatabaseOperations):
 
     def conflicts_suffix_sql(self, fields, conflicts_plan=CONFLICTS_PLAN_NONE):
         result = ''
-        if conflicts_plan == CONFLICTS_PLAN_UPSERT:
+        if conflicts_plan == CONFLICTS_PLAN_UPDATE:
             unique_fields = []
-            upsert_fields = []
+            update_fields = []
             for field in fields:
                 if field.unique and not field.primary_key:
                     unique_fields.append(field.name)
                 else:
-                    upsert_fields.append(field.name)
+                    update_fields.append(field.name)
             result = 'ON DUPLICATE KEY UPDATE '
-            result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in upsert_fields])
+            result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in update_fields])
 
         return result if result else super().conflicts_suffix_sql(fields, conflicts_plan=conflicts_plan)
