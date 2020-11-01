@@ -6,12 +6,13 @@ from copy import copy
 from django.core.exceptions import EmptyResultSet
 from django.db.models.expressions import Case, Exists, Func, Value, When
 from django.db.models.fields import (
-    BooleanField, CharField, DateTimeField, Field, IntegerField, UUIDField,
+    CharField, DateTimeField, Field, IntegerField, UUIDField,
 )
 from django.db.models.query_utils import RegisterLookupMixin
 from django.utils.datastructures import OrderedSet
 from django.utils.deprecation import RemovedInDjango40Warning
 from django.utils.functional import cached_property
+from django.utils.hashable import make_hashable
 
 
 class Lookup:
@@ -29,7 +30,9 @@ class Lookup:
         if bilateral_transforms:
             # Warn the user as soon as possible if they are trying to apply
             # a bilateral transformation on a nested QuerySet: that won't work.
-            from django.db.models.sql.query import Query  # avoid circular import
+            from django.db.models.sql.query import (  # avoid circular import
+                Query,
+            )
             if isinstance(rhs, Query):
                 raise NotImplementedError("Bilateral transformations on nested querysets are not implemented.")
         self.bilateral_transforms = bilateral_transforms
@@ -123,7 +126,7 @@ class Lookup:
         exprs = []
         for expr in (self.lhs, self.rhs):
             if isinstance(expr, Exists):
-                expr = Case(When(expr, then=True), default=False, output_field=BooleanField())
+                expr = Case(When(expr, then=True), default=False)
                 wrapped = True
             exprs.append(expr)
         lookup = type(self)(*exprs) if wrapped else self
@@ -140,6 +143,18 @@ class Lookup:
     @property
     def is_summary(self):
         return self.lhs.is_summary or getattr(self.rhs, 'is_summary', False)
+
+    @property
+    def identity(self):
+        return self.__class__, self.lhs, self.rhs
+
+    def __eq__(self, other):
+        if not isinstance(other, Lookup):
+            return NotImplemented
+        return self.identity == other.identity
+
+    def __hash__(self):
+        return hash(make_hashable(self.identity))
 
 
 class Transform(RegisterLookupMixin, Func):
@@ -239,7 +254,7 @@ class FieldGetDbPrepValueIterableMixin(FieldGetDbPrepValueMixin):
         if hasattr(param, 'resolve_expression'):
             param = param.resolve_expression(compiler.query)
         if hasattr(param, 'as_sql'):
-            sql, params = param.as_sql(compiler, connection)
+            sql, params = compiler.compile(param)
         return sql, params
 
     def batch_process_rhs(self, compiler, connection, rhs=None):

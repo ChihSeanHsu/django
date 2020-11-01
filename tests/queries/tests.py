@@ -47,7 +47,7 @@ class Queries1Tests(TestCase):
 
         cls.n1 = Note.objects.create(note='n1', misc='foo', id=1)
         cls.n2 = Note.objects.create(note='n2', misc='bar', id=2)
-        cls.n3 = Note.objects.create(note='n3', misc='foo', id=3)
+        cls.n3 = Note.objects.create(note='n3', misc='foo', id=3, negate=False)
 
         ann1 = Annotation.objects.create(name='a1', tag=cls.t1)
         ann1.notes.add(cls.n1)
@@ -849,14 +849,6 @@ class Queries1Tests(TestCase):
         self.assertQuerysetEqual(Note.objects.none() & Note.objects.all(), [])
         self.assertQuerysetEqual(Note.objects.all() & Note.objects.none(), [])
 
-    def test_ticket9411(self):
-        # Make sure bump_prefix() (an internal Query method) doesn't (re-)break. It's
-        # sufficient that this query runs without error.
-        qs = Tag.objects.values_list('id', flat=True).order_by('id')
-        qs.query.bump_prefix(qs.query)
-        first = qs[0]
-        self.assertEqual(list(qs), list(range(first, first + 5)))
-
     def test_ticket8439(self):
         # Complex combinations of conjunctions, disjunctions and nullable
         # relations.
@@ -1215,6 +1207,13 @@ class Queries1Tests(TestCase):
             Author.objects.filter(extra=self.e2),
             [self.a3, self.a4],
         )
+
+    def test_negate_field(self):
+        self.assertSequenceEqual(
+            Note.objects.filter(negate=True),
+            [self.n1, self.n2],
+        )
+        self.assertSequenceEqual(Note.objects.exclude(negate=True), [self.n3])
 
 
 class Queries2Tests(TestCase):
@@ -2077,6 +2076,16 @@ class QuerysetOrderedTests(unittest.TestCase):
         self.assertIs(qs.ordered, False)
         self.assertIs(qs.order_by('num_notes').ordered, True)
 
+    def test_annotated_default_ordering(self):
+        qs = Tag.objects.annotate(num_notes=Count('pk'))
+        self.assertIs(qs.ordered, False)
+        self.assertIs(qs.order_by('name').ordered, True)
+
+    def test_annotated_values_default_ordering(self):
+        qs = Tag.objects.values('name').annotate(num_notes=Count('pk'))
+        self.assertIs(qs.ordered, False)
+        self.assertIs(qs.order_by('name').ordered, True)
+
 
 @skipUnlessDBFeature('allow_sliced_subqueries_with_in')
 class SubqueryTests(TestCase):
@@ -2372,7 +2381,10 @@ class ValuesQuerysetTests(TestCase):
         qs = Number.objects.extra(select={'num2': 'num+1'}).annotate(Count('id'))
         values = qs.values_list(named=True).first()
         self.assertEqual(type(values).__name__, 'Row')
-        self.assertEqual(values._fields, ('num2', 'id', 'num', 'other_num', 'id__count'))
+        self.assertEqual(
+            values._fields,
+            ('num2', 'id', 'num', 'other_num', 'another_num', 'id__count'),
+        )
         self.assertEqual(values.num, 72)
         self.assertEqual(values.num2, 73)
         self.assertEqual(values.id__count, 1)
@@ -2387,6 +2399,11 @@ class ValuesQuerysetTests(TestCase):
         qs = Number.objects.annotate(combinedexpression1=expr).values_list(expr, 'combinedexpression1', named=True)
         values = qs.first()
         self.assertEqual(values._fields, ('combinedexpression2', 'combinedexpression1'))
+
+    def test_named_values_pickle(self):
+        value = Number.objects.values_list('num', 'other_num', named=True).get()
+        self.assertEqual(value, (72, None))
+        self.assertEqual(pickle.loads(pickle.dumps(value)), value)
 
 
 class QuerySetSupportsPythonIdioms(TestCase):
@@ -2790,11 +2807,11 @@ class ExcludeTests(TestCase):
         f1 = Food.objects.create(name='apples')
         Food.objects.create(name='oranges')
         Eaten.objects.create(food=f1, meal='dinner')
-        j1 = Job.objects.create(name='Manager')
+        cls.j1 = Job.objects.create(name='Manager')
         cls.r1 = Responsibility.objects.create(description='Playing golf')
         j2 = Job.objects.create(name='Programmer')
         r2 = Responsibility.objects.create(description='Programming')
-        JobResponsibilities.objects.create(job=j1, responsibility=cls.r1)
+        JobResponsibilities.objects.create(job=cls.j1, responsibility=cls.r1)
         JobResponsibilities.objects.create(job=j2, responsibility=r2)
 
     def test_to_field(self):
@@ -2854,6 +2871,26 @@ class ExcludeTests(TestCase):
         self.assertTrue(qs.exists())
         self.r1.delete()
         self.assertFalse(qs.exists())
+
+    def test_exclude_nullable_fields(self):
+        number = Number.objects.create(num=1, other_num=1)
+        Number.objects.create(num=2, other_num=2, another_num=2)
+        self.assertSequenceEqual(
+            Number.objects.exclude(other_num=F('another_num')),
+            [number],
+        )
+        self.assertSequenceEqual(
+            Number.objects.exclude(num=F('another_num')),
+            [number],
+        )
+
+    def test_exclude_multivalued_exists(self):
+        with CaptureQueriesContext(connection) as captured_queries:
+            self.assertSequenceEqual(
+                Job.objects.exclude(responsibilities__description='Programming'),
+                [self.j1],
+            )
+        self.assertIn('exists', captured_queries[0]['sql'].lower())
 
 
 class ExcludeTest17600(TestCase):

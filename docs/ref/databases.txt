@@ -398,11 +398,15 @@ Collation settings
 ~~~~~~~~~~~~~~~~~~
 
 The collation setting for a column controls the order in which data is sorted
-as well as what strings compare as equal. It can be set on a database-wide
-level and also per-table and per-column. This is `documented thoroughly`_ in
-the MySQL documentation. In all cases, you set the collation by directly
-manipulating the database tables; Django doesn't provide a way to set this on
-the model definition.
+as well as what strings compare as equal. You can specify the ``db_collation``
+parameter to set the collation name of the column for
+:attr:`CharField <django.db.models.CharField.db_collation>` and
+:attr:`TextField <django.db.models.TextField.db_collation>`.
+
+The collation can also be set on a database-wide level and per-table. This is
+`documented thoroughly`_ in the MySQL documentation. In such cases, you must
+set the collation by directly manipulating the database settings or tables.
+Django doesn't provide an API to change them.
 
 .. _documented thoroughly: https://dev.mysql.com/doc/refman/en/charset.html
 
@@ -431,6 +435,10 @@ because it is more accurate.
     using a case-insensitive collation, a formset with unique field values that
     differ only by case will pass validation, but upon calling ``save()``, an
     ``IntegrityError`` will be raised.
+
+.. versionchanged:: 3.2
+
+    Support for setting a database collation for the field was added.
 
 Connecting to the database
 --------------------------
@@ -639,7 +647,7 @@ Option          MariaDB   MySQL
 =============== ========= ==========
 ``SKIP LOCKED``           X (≥8.0.1)
 ``NOWAIT``      X (≥10.3) X (≥8.0.1)
-``OF``
+``OF``                    X (≥8.0.1)
 ``NO KEY``
 =============== ========= ==========
 
@@ -1059,9 +1067,7 @@ by 3rd parties that allow you to use other databases with Django:
 
 * `CockroachDB`_
 * `Firebird`_
-* `IBM DB2`_
 * `Microsoft SQL Server`_
-* `ODBC`_
 
 The Django versions and ORM features supported by these unofficial backends
 vary considerably. Queries regarding the specific capabilities of these
@@ -1070,6 +1076,4 @@ the support channels provided by each 3rd party project.
 
 .. _CockroachDB: https://pypi.org/project/django-cockroachdb/
 .. _Firebird: https://pypi.org/project/django-firebird/
-.. _IBM DB2: https://pypi.org/project/ibm_db_django/
 .. _Microsoft SQL Server: https://pypi.org/project/django-mssql-backend/
-.. _ODBC: https://pypi.org/project/django-pyodbc/

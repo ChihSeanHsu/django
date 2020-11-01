@@ -2,12 +2,9 @@ import time
 
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
-from django.test import (
-    RequestFactory, SimpleTestCase, ignore_warnings, override_settings,
-)
+from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.test.utils import require_jinja2
 from django.urls import resolve
-from django.utils.deprecation import RemovedInDjango40Warning
 from django.views.generic import RedirectView, TemplateView, View
 
 from . import views
@@ -198,7 +195,7 @@ class ViewTest(SimpleTestCase):
         view = SimpleView.as_view()
         response = view(request)
         self.assertEqual(200, response.status_code)
-        self.assertTrue(response['Allow'])
+        self.assertTrue(response.headers['Allow'])
 
     def test_options_for_get_view(self):
         """
@@ -229,7 +226,7 @@ class ViewTest(SimpleTestCase):
 
     def _assert_allows(self, response, *expected_methods):
         "Assert allowed HTTP methods reported in the Allow response header"
-        response_allows = set(response['Allow'].split(', '))
+        response_allows = set(response.headers['Allow'].split(', '))
         self.assertEqual(set(expected_methods + ('OPTIONS',)), response_allows)
 
     def test_args_kwargs_request_on_self(self):
@@ -350,6 +347,25 @@ class TemplateViewTest(SimpleTestCase):
         view = TemplateView.as_view(template_name='generic_views/using.html', template_engine='jinja2')
         self.assertEqual(view(request).render().content, b'Jinja2\n')
 
+    def test_template_params(self):
+        """
+        A generic template view passes kwargs as context.
+        """
+        response = self.client.get('/template/simple/bar/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['foo'], 'bar')
+        self.assertIsInstance(response.context['view'], View)
+
+    def test_extra_template_params(self):
+        """
+        A template view can be customized to return extra context.
+        """
+        response = self.client.get('/template/custom/bar/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['foo'], 'bar')
+        self.assertEqual(response.context['key'], 'value')
+        self.assertIsInstance(response.context['view'], View)
+
     def test_cached_views(self):
         """
         A template view can be cached
@@ -374,7 +390,7 @@ class TemplateViewTest(SimpleTestCase):
 
     def test_content_type(self):
         response = self.client.get('/template/content_type/')
-        self.assertEqual(response['Content-Type'], 'text/plain')
+        self.assertEqual(response.headers['Content-Type'], 'text/plain')
 
     def test_resolve_view(self):
         match = resolve('/template/content_type/')
@@ -445,12 +461,12 @@ class RedirectViewTest(SimpleTestCase):
         "Named pattern parameter should reverse to the matching pattern"
         response = RedirectView.as_view(pattern_name='artist_detail')(self.rf.get('/foo/'), pk=1)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/detail/artist/1/')
+        self.assertEqual(response.headers['Location'], '/detail/artist/1/')
 
     def test_named_url_pattern_using_args(self):
         response = RedirectView.as_view(pattern_name='artist_detail')(self.rf.get('/foo/'), 1)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/detail/artist/1/')
+        self.assertEqual(response.headers['Location'], '/detail/artist/1/')
 
     def test_redirect_POST(self):
         "Default is a temporary redirect"
@@ -568,38 +584,3 @@ class SingleObjectTemplateResponseMixinTest(SimpleTestCase):
         )
         with self.assertRaisesMessage(ImproperlyConfigured, msg):
             view.get_template_names()
-
-
-@override_settings(ROOT_URLCONF='generic_views.urls')
-class DeprecationTests(SimpleTestCase):
-    @ignore_warnings(category=RemovedInDjango40Warning)
-    def test_template_params(self):
-        """A generic template view passes kwargs as context."""
-        response = self.client.get('/template/simple/bar/')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['foo'], 'bar')
-        self.assertIsInstance(response.context['view'], View)
-
-    @ignore_warnings(category=RemovedInDjango40Warning)
-    def test_extra_template_params(self):
-        """A template view can be customized to return extra context."""
-        response = self.client.get('/template/custom/bar1/bar2/')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['foo1'], 'bar1')
-        self.assertEqual(response.context['foo2'], 'bar2')
-        self.assertEqual(response.context['key'], 'value')
-        self.assertIsInstance(response.context['view'], View)
-
-    def test_template_params_warning(self):
-        response = self.client.get('/template/custom/bar1/bar2/')
-        self.assertEqual(response.status_code, 200)
-        msg = (
-            'TemplateView passing URL kwargs to the context is deprecated. '
-            'Reference %s in your template through view.kwargs instead.'
-        )
-        with self.assertRaisesMessage(RemovedInDjango40Warning, msg % 'foo1'):
-            str(response.context['foo1'])
-        with self.assertRaisesMessage(RemovedInDjango40Warning, msg % 'foo2'):
-            str(response.context['foo2'])
-        self.assertEqual(response.context['key'], 'value')
-        self.assertIsInstance(response.context['view'], View)

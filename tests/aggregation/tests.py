@@ -1,7 +1,6 @@
 import datetime
 import re
 from decimal import Decimal
-from unittest import skipIf
 
 from django.core.exceptions import FieldError
 from django.db import connection
@@ -841,16 +840,12 @@ class AggregateTestCase(TestCase):
             Book.objects.aggregate(fail=F('price'))
 
     def test_nonfield_annotation(self):
-        book = Book.objects.annotate(val=Max(Value(2, output_field=IntegerField()))).first()
+        book = Book.objects.annotate(val=Max(Value(2))).first()
         self.assertEqual(book.val, 2)
         book = Book.objects.annotate(val=Max(Value(2), output_field=IntegerField())).first()
         self.assertEqual(book.val, 2)
         book = Book.objects.annotate(val=Max(2, output_field=IntegerField())).first()
         self.assertEqual(book.val, 2)
-
-    def test_missing_output_field_raises_error(self):
-        with self.assertRaisesMessage(FieldError, 'Cannot resolve expression type, unknown output_field'):
-            Book.objects.annotate(val=Max(2)).first()
 
     def test_annotation_expressions(self):
         authors = Author.objects.annotate(combined_ages=Sum(F('age') + F('friends__age'))).order_by('name')
@@ -893,7 +888,7 @@ class AggregateTestCase(TestCase):
 
     def test_combine_different_types(self):
         msg = (
-            'Expression contains mixed types: FloatField, IntegerField. '
+            'Expression contains mixed types: FloatField, DecimalField. '
             'You must set output_field.'
         )
         qs = Book.objects.annotate(sums=Sum('rating') + Sum('pages') + Sum('price'))
@@ -1008,6 +1003,16 @@ class AggregateTestCase(TestCase):
         ).get(name="Adrian Holovaty")
 
         self.assertEqual(author.sum_age, other_author.sum_age)
+
+    def test_aggregate_over_aggregate(self):
+        msg = "Cannot compute Avg('age'): 'age' is an aggregate"
+        with self.assertRaisesMessage(FieldError, msg):
+            Author.objects.annotate(
+                age_alias=F('age'),
+            ).aggregate(
+                age=Sum(F('age')),
+                avg_age=Avg(F('age')),
+            )
 
     def test_annotated_aggregate_over_annotated_aggregate(self):
         with self.assertRaisesMessage(FieldError, "Cannot compute Sum('id__max'): 'id__max' is an aggregate"):
@@ -1208,16 +1213,16 @@ class AggregateTestCase(TestCase):
         ])
 
     @skipUnlessDBFeature('supports_subqueries_in_group_by')
-    @skipIf(
-        connection.vendor == 'mysql' and 'ONLY_FULL_GROUP_BY' in connection.sql_mode,
-        'GROUP BY optimization does not work properly when ONLY_FULL_GROUP_BY '
-        'mode is enabled on MySQL, see #31331.',
-    )
     def test_aggregation_subquery_annotation_multivalued(self):
         """
         Subquery annotations must be included in the GROUP BY if they use
         potentially multivalued relations (contain the LOOKUP_SEP).
         """
+        if connection.vendor == 'mysql' and 'ONLY_FULL_GROUP_BY' in connection.sql_mode:
+            self.skipTest(
+                'GROUP BY optimization does not work properly when '
+                'ONLY_FULL_GROUP_BY mode is enabled on MySQL, see #31331.'
+            )
         subquery_qs = Author.objects.filter(
             pk=OuterRef('pk'),
             book__name=OuterRef('book__name'),
@@ -1310,3 +1315,18 @@ class AggregateTestCase(TestCase):
         # with self.assertNumQueries(1) as ctx:
         #     self.assertSequenceEqual(books_qs, [book])
         # self.assertEqual(ctx[0]['sql'].count('SELECT'), 2)
+
+    def test_aggregation_random_ordering(self):
+        """Random() is not included in the GROUP BY when used for ordering."""
+        authors = Author.objects.annotate(contact_count=Count('book')).order_by('?')
+        self.assertQuerysetEqual(authors, [
+            ('Adrian Holovaty', 1),
+            ('Jacob Kaplan-Moss', 1),
+            ('Brad Dayley', 1),
+            ('James Bennett', 1),
+            ('Jeffrey Forcier', 1),
+            ('Paul Bissex', 1),
+            ('Wesley J. Chun', 1),
+            ('Stuart Russell', 1),
+            ('Peter Norvig', 2),
+        ], lambda a: (a.name, a.contact_count), ordered=False)

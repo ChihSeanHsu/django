@@ -23,9 +23,9 @@ end in April 2020.
 Python compatibility
 ====================
 
-Django 2.2 supports Python 3.5, 3.6, 3.7, and 3.8 (as of 2.2.8). We
-**highly recommend** and only officially support the latest release of each
-series.
+Django 2.2 supports Python 3.5, 3.6, 3.7, 3.8 (as of 2.2.8), and 3.9 (as of
+2.2.17). We **highly recommend** and only officially support the latest release
+of each series.
 
 .. _whats-new-2.2:
 
@@ -474,6 +474,14 @@ Miscellaneous
 
 * Providing an integer in the ``key`` argument of the :meth:`.cache.delete` or
   :meth:`.cache.get` now raises :exc:`ValueError`.
+
+* Plural equations for some languages are changed, because the latest versions
+  from Transifex are incorporated.
+
+  .. note::
+
+    The ability to handle ``.po`` files containing different plural equations
+    for the same language was added in Django 2.2.12.
 
 .. _deprecated-features-2.2:
 

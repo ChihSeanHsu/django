@@ -93,10 +93,6 @@ class SimpleDatabaseOperationTests(SimpleTestCase):
         with self.assertRaisesMessage(NotImplementedError, self.may_require_msg % 'date_extract_sql'):
             self.ops.time_extract_sql(None, None)
 
-    def test_date_interval_sql(self):
-        with self.assertRaisesMessage(NotImplementedError, self.may_require_msg % 'date_interval_sql'):
-            self.ops.date_interval_sql(None)
-
     def test_date_trunc_sql(self):
         with self.assertRaisesMessage(NotImplementedError, self.may_require_msg % 'date_trunc_sql'):
             self.ops.date_trunc_sql(None, None)
@@ -120,11 +116,6 @@ class SimpleDatabaseOperationTests(SimpleTestCase):
     def test_datetime_extract_sql(self):
         with self.assertRaisesMessage(NotImplementedError, self.may_require_msg % 'datetime_extract_sql'):
             self.ops.datetime_extract_sql(None, None, None)
-
-    def test_json_cast_text_sql(self):
-        msg = self.may_require_msg % 'json_cast_text_sql'
-        with self.assertRaisesMessage(NotImplementedError, msg):
-            self.ops.json_cast_text_sql(None)
 
 
 class DatabaseOperationTests(TestCase):

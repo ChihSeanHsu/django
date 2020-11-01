@@ -151,7 +151,7 @@ protects against memory exhaustion attacks using forged ``POST`` requests::
     >>> formset.is_valid()
     False
     >>> formset.non_form_errors()
-    ['Please submit 1000 or fewer forms.']
+    ['Please submit at most 1000 forms.']
 
 When ``absolute_max`` is None, it defaults to ``max_num + 1000``. (If
 ``max_num`` is ``None``, it defaults to ``2000``).
@@ -371,7 +371,7 @@ deletion, is less than or equal to ``max_num``.
     >>> formset.errors
     [{}, {}]
     >>> formset.non_form_errors()
-    ['Please submit 1 or fewer forms.']
+    ['Please submit at most 1 form.']
 
 ``validate_max=True`` validates against ``max_num`` strictly even if
 ``max_num`` was exceeded because the amount of initial data supplied was
@@ -413,7 +413,12 @@ deletion, is greater than or equal to ``min_num``.
     >>> formset.errors
     [{}, {}]
     >>> formset.non_form_errors()
-    ['Please submit 3 or more forms.']
+    ['Please submit at least 3 forms.']
+
+.. note::
+
+    Regardless of ``validate_min``, if a formset contains no data, then
+    ``extra + min_num`` empty forms will be displayed.
 
 Dealing with ordering and deletion of forms
 ===========================================
@@ -592,6 +597,18 @@ them::
 On the other hand, if you are using a plain ``FormSet``, it's up to you to
 handle ``formset.deleted_forms``, perhaps in your formset's ``save()`` method,
 as there's no general notion of what it means to delete a form.
+
+``can_delete_extra``
+--------------------
+
+.. versionadded:: 3.2
+
+.. attribute:: BaseFormSet.can_delete_extra
+
+Default: ``True``
+
+While setting ``can_delete=True``, specifying ``can_delete_extra=False`` will
+remove the option to delete extra forms.
 
 Adding additional fields to a formset
 =====================================

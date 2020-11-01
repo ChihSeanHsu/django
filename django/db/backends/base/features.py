@@ -4,6 +4,8 @@ from django.utils.functional import cached_property
 
 class BaseDatabaseFeatures:
     gis_enabled = False
+    # Oracle can't group by LOB (large object) data types.
+    allows_group_by_lob = True
     allows_group_by_pk = False
     allows_group_by_selected_pks = False
     empty_fetchmany_value = []
@@ -100,7 +102,7 @@ class BaseDatabaseFeatures:
     # The database's limit on the number of query parameters.
     max_query_params = None
 
-    # Can an object have an autoincrement primary key of 0? MySQL says No.
+    # Can an object have an autoincrement primary key of 0?
     allows_auto_pk_0 = True
 
     # Do we need to NULL a ForeignKey out, or can the constraint check be
@@ -171,6 +173,9 @@ class BaseDatabaseFeatures:
 
     # Can it create foreign key constraints inline when adding columns?
     can_create_inline_fk = True
+
+    # Does it automatically index foreign keys?
+    indexes_foreign_keys = True
 
     # Does it support CHECK constraints?
     supports_column_check_constraints = True
@@ -253,9 +258,6 @@ class BaseDatabaseFeatures:
     # Does the backend support keyword parameters for cursor.callproc()?
     supports_callproc_kwargs = False
 
-    # Convert CharField results from bytes to str in database functions.
-    db_functions_convert_bytes_to_str = False
-
     # What formats does the backend EXPLAIN syntax support?
     supported_explain_formats = set()
 
@@ -301,6 +303,26 @@ class BaseDatabaseFeatures:
     has_native_json_field = False
     # Does the backend use PostgreSQL-style JSON operators like '->'?
     has_json_operators = False
+    # Does the backend support __contains and __contained_by lookups for
+    # a JSONField?
+    supports_json_field_contains = True
+    # Does value__d__contains={'f': 'g'} (without a list around the dict) match
+    # {'d': [{'f': 'g'}]}?
+    json_key_contains_list_matching_requires_list = False
+
+    # Does the backend support column collations?
+    supports_collation_on_charfield = True
+    supports_collation_on_textfield = True
+    # Does the backend support non-deterministic collations?
+    supports_non_deterministic_collations = True
+
+    # Collation names for use by the Django test suite.
+    test_collations = {
+        'ci': None,  # Case-insensitive.
+        'cs': None,  # Case-sensitive.
+        'non_default': None,  # Non-default.
+        'swedish_ci': None  # Swedish case-insensitive.
+    }
 
     def __init__(self, connection):
         self.connection = connection

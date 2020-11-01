@@ -266,7 +266,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         self.assertEqual([form.cleaned_data for form in formset.forms], [{}, {}, {}])
 
     def test_min_num_displaying_more_than_one_blank_form(self):
-        """"
+        """
         More than 1 empty form can also be displayed using formset_factory's
         min_num argument. It will (essentially) increment the extra argument.
         """
@@ -336,7 +336,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         ChoiceFormSet = formset_factory(Choice, extra=1, max_num=1, validate_max=True)
         formset = ChoiceFormSet(data, auto_id=False, prefix='choices')
         self.assertFalse(formset.is_valid())
-        self.assertEqual(formset.non_form_errors(), ['Please submit 1 or fewer forms.'])
+        self.assertEqual(formset.non_form_errors(), ['Please submit at most 1 form.'])
 
     def test_formset_validate_min_flag(self):
         """
@@ -358,7 +358,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         ChoiceFormSet = formset_factory(Choice, extra=1, min_num=3, validate_min=True)
         formset = ChoiceFormSet(data, auto_id=False, prefix='choices')
         self.assertFalse(formset.is_valid())
-        self.assertEqual(formset.non_form_errors(), ['Please submit 3 or more forms.'])
+        self.assertEqual(formset.non_form_errors(), ['Please submit at least 3 forms.'])
 
     def test_formset_validate_min_unchanged_forms(self):
         """
@@ -394,7 +394,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         formset = ChoiceFormSet(data, prefix='choices')
         self.assertFalse(formset.has_changed())
         self.assertFalse(formset.is_valid())
-        self.assertEqual(formset.non_form_errors(), ['Please submit 1 or more forms.'])
+        self.assertEqual(formset.non_form_errors(), ['Please submit at least 1 form.'])
 
     def test_second_form_partially_filled_2(self):
         """A partially completed form is invalid."""
@@ -888,7 +888,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         self.assertIs(formset.is_valid(), False)
         self.assertEqual(
             formset.non_form_errors(),
-            ['Please submit 1000 or fewer forms.'],
+            ['Please submit at most 1000 forms.'],
         )
         self.assertEqual(formset.absolute_max, 2000)
 
@@ -912,7 +912,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         self.assertEqual(len(formset.forms), 3000)
         self.assertEqual(
             formset.non_form_errors(),
-            ['Please submit 1000 or fewer forms.'],
+            ['Please submit at most 1000 forms.'],
         )
 
     def test_absolute_max_with_max_num(self):
@@ -931,7 +931,7 @@ class FormsFormsetTestCase(SimpleTestCase):
         self.assertEqual(len(formset.forms), 1000)
         self.assertEqual(
             formset.non_form_errors(),
-            ['Please submit 30 or fewer forms.'],
+            ['Please submit at most 30 forms.'],
         )
 
     def test_absolute_max_invalid(self):
@@ -1197,6 +1197,51 @@ class FormsFormsetTestCase(SimpleTestCase):
         self.assertTrue(hasattr(formset, '__html__'))
         self.assertEqual(str(formset), formset.__html__())
 
+    def test_can_delete_extra_formset_forms(self):
+        ChoiceFormFormset = formset_factory(form=Choice, can_delete=True, extra=2)
+        formset = ChoiceFormFormset()
+        self.assertEqual(len(formset), 2)
+        self.assertIn('DELETE', formset.forms[0].fields)
+        self.assertIn('DELETE', formset.forms[1].fields)
+
+    def test_disable_delete_extra_formset_forms(self):
+        ChoiceFormFormset = formset_factory(
+            form=Choice,
+            can_delete=True,
+            can_delete_extra=False,
+            extra=2,
+        )
+        formset = ChoiceFormFormset()
+        self.assertEqual(len(formset), 2)
+        self.assertNotIn('DELETE', formset.forms[0].fields)
+        self.assertNotIn('DELETE', formset.forms[1].fields)
+
+        formset = ChoiceFormFormset(initial=[{'choice': 'Zero', 'votes': '1'}])
+        self.assertEqual(len(formset), 3)
+        self.assertIn('DELETE', formset.forms[0].fields)
+        self.assertNotIn('DELETE', formset.forms[1].fields)
+        self.assertNotIn('DELETE', formset.forms[2].fields)
+
+        formset = ChoiceFormFormset(data={
+            'form-0-choice': 'Zero',
+            'form-0-votes': '0',
+            'form-0-DELETE': 'on',
+            'form-1-choice': 'One',
+            'form-1-votes': '1',
+            'form-2-choice': '',
+            'form-2-votes': '',
+            'form-TOTAL_FORMS': '3',
+            'form-INITIAL_FORMS': '1',
+        }, initial=[{'choice': 'Zero', 'votes': '1'}])
+        self.assertEqual(formset.cleaned_data, [
+            {'choice': 'Zero', 'votes': 0, 'DELETE': True},
+            {'choice': 'One', 'votes': 1},
+            {},
+        ])
+        self.assertIs(formset._should_delete_form(formset.forms[0]), True)
+        self.assertIs(formset._should_delete_form(formset.forms[1]), False)
+        self.assertIs(formset._should_delete_form(formset.forms[2]), False)
+
 
 class FormsetAsTagTests(SimpleTestCase):
     def setUp(self):
@@ -1256,7 +1301,10 @@ ArticleFormSet = formset_factory(ArticleForm)
 
 class TestIsBoundBehavior(SimpleTestCase):
     def test_no_data_raises_validation_error(self):
-        msg = 'ManagementForm data is missing or has been tampered with'
+        msg = (
+            'ManagementForm data is missing or has been tampered with. '
+            'Missing fields: form-TOTAL_FORMS, form-INITIAL_FORMS'
+        )
         with self.assertRaisesMessage(ValidationError, msg):
             ArticleFormSet({}).is_valid()
 

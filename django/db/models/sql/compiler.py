@@ -6,8 +6,8 @@ from itertools import chain
 from django.core.exceptions import EmptyResultSet, FieldError
 from django.db import DatabaseError, NotSupportedError
 from django.db.models.constants import LOOKUP_SEP
-from django.db.models.expressions import F, OrderBy, Random, RawSQL, Ref, Value
-from django.db.models.functions import Cast
+from django.db.models.expressions import F, OrderBy, RawSQL, Ref, Value
+from django.db.models.functions import Cast, Random
 from django.db.models.query_utils import Q, select_related_descend
 from django.db.models.sql.constants import (
     CURSOR, GET_ITERATOR_CHUNK_SIZE, MULTI, NO_RESULTS, ORDER_DIR, SINGLE,
@@ -359,7 +359,7 @@ class SQLCompiler:
 
         for expr, is_ref in order_by:
             resolved = expr.resolve_expression(self.query, allow_joins=True, reuse=None)
-            if self.query.combinator:
+            if self.query.combinator and self.select:
                 src = resolved.get_source_expressions()[0]
                 expr_src = expr.get_source_expressions()[0]
                 # Relabel order by columns to raw numbers if this is a combined
@@ -982,7 +982,8 @@ class SQLCompiler:
         the query.
         """
         def _get_parent_klass_info(klass_info):
-            for parent_model, parent_link in klass_info['model']._meta.parents.items():
+            concrete_model = klass_info['model']._meta.concrete_model
+            for parent_model, parent_link in concrete_model._meta.parents.items():
                 parent_list = parent_model._meta.get_parent_list()
                 yield {
                     'model': parent_model,
@@ -1007,8 +1008,9 @@ class SQLCompiler:
             select_fields is filled recursively, so it also contains fields
             from the parent models.
             """
+            concrete_model = klass_info['model']._meta.concrete_model
             for select_index in klass_info['select_fields']:
-                if self.select[select_index][0].target.model == klass_info['model']:
+                if self.select[select_index][0].target.model == concrete_model:
                     return self.select[select_index][0]
 
         def _get_field_choices():
@@ -1125,9 +1127,6 @@ class SQLCompiler:
         Backends (e.g. NoSQL) can override this in order to use optimized
         versions of "query has any results."
         """
-        # This is always executed on a query clone, so we can modify self.query
-        self.query.add_extra({'a': 1}, None, None, None, None, None)
-        self.query.set_extra_mask(['a'])
         return bool(self.execute_sql(SINGLE))
 
     def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
@@ -1446,6 +1445,11 @@ class SQLDeleteCompiler(SQLCompiler):
         ]
         outerq = Query(self.query.model)
         outerq.where = self.query.where_class()
+        if not self.connection.features.update_can_self_select:
+            # Force the materialization of the inner query to allow reference
+            # to the target table on MySQL.
+            sql, params = innerq.get_compiler(connection=self.connection).as_sql()
+            innerq = RawSQL('SELECT * FROM (%s) subquery' % sql, params)
         outerq.add_q(Q(pk__in=innerq))
         return self._as_sql(outerq)
 

@@ -10,6 +10,7 @@ affordances
 aggregator
 Ai
 Alchin
+allowlist
 alphanumerics
 amet
 analytics
@@ -277,10 +278,12 @@ hstore
 html
 http
 https
+Hypercorn
 hyperlinks
 ie
 ies
 iframe
+Igbo
 inbox
 incrementing
 indexable
@@ -368,6 +371,7 @@ metre
 MiB
 micrometre
 middleware
+middlewares
 migrationname
 millimetre
 Minification
@@ -701,6 +705,7 @@ trigram
 trigrams
 tuple
 tuples
+Turkmen
 tv
 txt
 tz
@@ -780,8 +785,6 @@ vertices
 viewable
 virtualized
 Weblog
-whitelist
-whitelisted
 whitespace
 whitespaces
 whizbang

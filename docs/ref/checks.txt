@@ -85,6 +85,7 @@ Django's system checks are organized using the following tags:
 * ``models``: Checks of model, field, and manager definitions.
 * ``security``: Checks security related configuration.
 * ``signals``: Checks on signal declarations and handler registrations.
+* ``sites``: Checks :mod:`django.contrib.sites` configuration.
 * ``staticfiles``: Checks :mod:`django.contrib.staticfiles` configuration.
 * ``templates``: Checks template related configuration.
 * ``translation``: Checks translation related configuration.
@@ -100,6 +101,10 @@ Some checks may be registered with multiple tags.
 
     The ``database`` checks are now run only for database aliases specified
     using the :option:`check --database` option.
+
+.. versionchanged:: 3.2
+
+    The ``sites`` tag was added.
 
 Core system checks
 ==================
@@ -191,6 +196,8 @@ Model fields
 * **fields.E170**: ``BinaryField``’s ``default`` cannot be a string. Use bytes
   content instead.
 * **fields.E180**: ``<database>`` does not support ``JSONField``\s.
+* **fields.E190**: ``<database>`` does not support a database collation on
+  ``<field_type>``\s.
 * **fields.E900**: ``IPAddressField`` has been removed except for support in
   historical migrations.
 * **fields.W900**: ``IPAddressField`` has been deprecated. Support for it
@@ -364,6 +371,7 @@ Models
   non-key columns.
 * **models.W040**: ``<database>`` does not support indexes with non-key
   columns.
+* **models.E041**: ``constraints`` refers to the joined field ``<field name>``.
 
 Security
 --------
@@ -478,6 +486,12 @@ The following checks are run if you use the :option:`check --deploy` option:
 * **security.E023**: You have set the :setting:`SECURE_REFERRER_POLICY` setting
   to an invalid value.
 
+The following checks verify that your security-related settings are correctly
+configured:
+
+* **security.E100**: :setting:`DEFAULT_HASHING_ALGORITHM` must be ``'sha1'`` or
+  ``'sha256'``.
+
 Signals
 -------
 
@@ -575,10 +589,10 @@ with the admin site:
 * **admin.E016**: The value of ``form`` must inherit from ``BaseModelForm``.
 * **admin.E017**: The value of ``filter_vertical`` must be a list or tuple.
 * **admin.E018**: The value of ``filter_horizontal`` must be a list or tuple.
-* **admin.E019**: The value of ``filter_vertical[n]/filter_vertical[n]`` refers
-  to ``<field name>``, which is not an attribute of ``<model>``.
-* **admin.E020**: The value of ``filter_vertical[n]/filter_vertical[n]`` must
-  be a many-to-many field.
+* **admin.E019**: The value of ``filter_vertical[n]/filter_horizontal[n]``
+  refers to ``<field name>``, which is not an attribute of ``<model>``.
+* **admin.E020**: The value of ``filter_vertical[n]/filter_horizontal[n]``
+  must be a many-to-many field.
 * **admin.E021**: The value of ``radio_fields`` must be a dictionary.
 * **admin.E022**: The value of ``radio_fields`` refers to ``<field name>``,
   which is not an attribute of ``<model>``.
@@ -811,6 +825,11 @@ The following checks are performed on any model using a
   ``<field name>``.
 * **sites.E002**: ``CurrentSiteManager`` cannot use ``<field>`` as it is not a
   foreign key or a many-to-many field.
+
+The following checks verify that :mod:`django.contrib.sites` is correctly
+configured:
+
+* **sites.E101**: The :setting:`SITE_ID` setting must be an integer.
 
 ``staticfiles``
 ---------------

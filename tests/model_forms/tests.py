@@ -16,6 +16,7 @@ from django.forms.models import (
 )
 from django.template import Context, Template
 from django.test import SimpleTestCase, TestCase, skipUnlessDBFeature
+from django.test.utils import isolate_apps
 
 from .models import (
     Article, ArticleStatus, Author, Author1, Award, BetterWriter, BigInt, Book,
@@ -30,7 +31,7 @@ from .models import (
 )
 
 if test_images:
-    from .models import ImageFile, OptionalImageFile, NoExtensionImageFile
+    from .models import ImageFile, NoExtensionImageFile, OptionalImageFile
 
     class ImageFileForm(forms.ModelForm):
         class Meta:
@@ -301,19 +302,30 @@ class ModelFormBaseTest(TestCase):
         self.assertEqual(obj.name, '')
 
     def test_save_blank_null_unique_charfield_saves_null(self):
-        form_class = modelform_factory(model=NullableUniqueCharFieldModel, fields=['codename'])
+        form_class = modelform_factory(model=NullableUniqueCharFieldModel, fields='__all__')
         empty_value = '' if connection.features.interprets_empty_strings_as_nulls else None
-
-        form = form_class(data={'codename': ''})
+        data = {
+            'codename': '',
+            'email': '',
+            'slug': '',
+            'url': '',
+        }
+        form = form_class(data=data)
         self.assertTrue(form.is_valid())
         form.save()
         self.assertEqual(form.instance.codename, empty_value)
+        self.assertEqual(form.instance.email, empty_value)
+        self.assertEqual(form.instance.slug, empty_value)
+        self.assertEqual(form.instance.url, empty_value)
 
         # Save a second form to verify there isn't a unique constraint violation.
-        form = form_class(data={'codename': ''})
+        form = form_class(data=data)
         self.assertTrue(form.is_valid())
         form.save()
         self.assertEqual(form.instance.codename, empty_value)
+        self.assertEqual(form.instance.email, empty_value)
+        self.assertEqual(form.instance.slug, empty_value)
+        self.assertEqual(form.instance.url, empty_value)
 
     def test_missing_fields_attribute(self):
         message = (
@@ -1644,6 +1656,52 @@ class ModelFormBasicTests(TestCase):
         obj.name = 'Alice'
         obj.full_clean()
 
+    def test_validate_foreign_key_uses_default_manager(self):
+        class MyForm(forms.ModelForm):
+            class Meta:
+                model = Article
+                fields = '__all__'
+
+        # Archived writers are filtered out by the default manager.
+        w = Writer.objects.create(name='Randy', archived=True)
+        data = {
+            'headline': 'My Article',
+            'slug': 'my-article',
+            'pub_date': datetime.date.today(),
+            'writer': w.pk,
+            'article': 'lorem ipsum',
+        }
+        form = MyForm(data)
+        self.assertIs(form.is_valid(), False)
+        self.assertEqual(
+            form.errors,
+            {'writer': ['Select a valid choice. That choice is not one of the available choices.']},
+        )
+
+    def test_validate_foreign_key_to_model_with_overridden_manager(self):
+        class MyForm(forms.ModelForm):
+            class Meta:
+                model = Article
+                fields = '__all__'
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                # Allow archived authors.
+                self.fields['writer'].queryset = Writer._base_manager.all()
+
+        w = Writer.objects.create(name='Randy', archived=True)
+        data = {
+            'headline': 'My Article',
+            'slug': 'my-article',
+            'pub_date': datetime.date.today(),
+            'writer': w.pk,
+            'article': 'lorem ipsum',
+        }
+        form = MyForm(data)
+        self.assertIs(form.is_valid(), True)
+        article = form.save()
+        self.assertEqual(article.writer, w)
+
 
 class ModelMultipleChoiceFieldTests(TestCase):
     @classmethod
@@ -1817,11 +1875,11 @@ class ModelMultipleChoiceFieldTests(TestCase):
             self.assertTrue(form.has_changed())
 
     def test_clean_does_deduplicate_values(self):
-        class WriterForm(forms.Form):
-            persons = forms.ModelMultipleChoiceField(queryset=Writer.objects.all())
+        class PersonForm(forms.Form):
+            persons = forms.ModelMultipleChoiceField(queryset=Person.objects.all())
 
-        person1 = Writer.objects.create(name="Person 1")
-        form = WriterForm(data={})
+        person1 = Person.objects.create(name='Person 1')
+        form = PersonForm(data={})
         queryset = form.fields['persons'].clean([str(person1.pk)] * 50)
         sql, params = queryset.query.sql_with_params()
         self.assertEqual(len(params), 1)
@@ -2771,6 +2829,72 @@ class LimitChoicesToTests(TestCase):
             self.assertEqual(today_callable_dict.call_count, 2)
             StumpJokeForm()
             self.assertEqual(today_callable_dict.call_count, 3)
+
+    @isolate_apps('model_forms')
+    def test_limit_choices_to_no_duplicates(self):
+        joke1 = StumpJoke.objects.create(
+            funny=True,
+            most_recently_fooled=self.threepwood,
+        )
+        joke2 = StumpJoke.objects.create(
+            funny=True,
+            most_recently_fooled=self.threepwood,
+        )
+        joke3 = StumpJoke.objects.create(
+            funny=True,
+            most_recently_fooled=self.marley,
+        )
+        StumpJoke.objects.create(funny=False, most_recently_fooled=self.marley)
+        joke1.has_fooled_today.add(self.marley, self.threepwood)
+        joke2.has_fooled_today.add(self.marley)
+        joke3.has_fooled_today.add(self.marley, self.threepwood)
+
+        class CharacterDetails(models.Model):
+            character1 = models.ForeignKey(
+                Character,
+                models.CASCADE,
+                limit_choices_to=models.Q(
+                    jokes__funny=True,
+                    jokes_today__funny=True,
+                ),
+                related_name='details_fk_1',
+            )
+            character2 = models.ForeignKey(
+                Character,
+                models.CASCADE,
+                limit_choices_to={
+                    'jokes__funny': True,
+                    'jokes_today__funny': True,
+                },
+                related_name='details_fk_2',
+            )
+            character3 = models.ManyToManyField(
+                Character,
+                limit_choices_to=models.Q(
+                    jokes__funny=True,
+                    jokes_today__funny=True,
+                ),
+                related_name='details_m2m_1',
+            )
+
+        class CharacterDetailsForm(forms.ModelForm):
+            class Meta:
+                model = CharacterDetails
+                fields = '__all__'
+
+        form = CharacterDetailsForm()
+        self.assertCountEqual(
+            form.fields['character1'].queryset,
+            [self.marley, self.threepwood],
+        )
+        self.assertCountEqual(
+            form.fields['character2'].queryset,
+            [self.marley, self.threepwood],
+        )
+        self.assertCountEqual(
+            form.fields['character3'].queryset,
+            [self.marley, self.threepwood],
+        )
 
 
 class FormFieldCallbackTests(SimpleTestCase):

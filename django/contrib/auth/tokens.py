@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from django.conf import settings
 from django.utils.crypto import constant_time_compare, salted_hmac
@@ -11,8 +11,14 @@ class PasswordResetTokenGenerator:
     reset mechanism.
     """
     key_salt = "django.contrib.auth.tokens.PasswordResetTokenGenerator"
-    algorithm = 'sha256'
-    secret = settings.SECRET_KEY
+    algorithm = None
+    secret = None
+
+    def __init__(self):
+        self.secret = self.secret or settings.SECRET_KEY
+        # RemovedInDjango40Warning: when the deprecation ends, replace with:
+        # self.algorithm = self.algorithm or 'sha256'
+        self.algorithm = self.algorithm or settings.DEFAULT_HASHING_ALGORITHM
 
     def make_token(self, user):
         """
@@ -30,6 +36,8 @@ class PasswordResetTokenGenerator:
         # Parse the token
         try:
             ts_b36, _ = token.split("-")
+            # RemovedInDjango40Warning.
+            legacy_token = len(ts_b36) < 4
         except ValueError:
             return False
 
@@ -49,8 +57,14 @@ class PasswordResetTokenGenerator:
             ):
                 return False
 
+        # RemovedInDjango40Warning: convert days to seconds and round to
+        # midnight (server time) for pre-Django 3.1 tokens.
+        now = self._now()
+        if legacy_token:
+            ts *= 24 * 60 * 60
+            ts += int((now - datetime.combine(now.date(), time.min)).total_seconds())
         # Check the timestamp is within limit.
-        if (self._num_seconds(self._now()) - ts) > settings.PASSWORD_RESET_TIMEOUT:
+        if (self._num_seconds(now) - ts) > settings.PASSWORD_RESET_TIMEOUT:
             return False
 
         return True
@@ -67,14 +81,14 @@ class PasswordResetTokenGenerator:
             # legacy argument and replace with:
             #   algorithm=self.algorithm,
             algorithm='sha1' if legacy else self.algorithm,
-        ).hexdigest()[::2]  # Limit to 20 characters to shorten the URL.
+        ).hexdigest()[::2]  # Limit to shorten the URL.
         return "%s-%s" % (ts_b36, hash_string)
 
     def _make_hash_value(self, user, timestamp):
         """
-        Hash the user's primary key and some user state that's sure to change
-        after a password reset to produce a token that invalidated when it's
-        used:
+        Hash the user's primary key, email (if available), and some user state
+        that's sure to change after a password reset to produce a token that is
+        invalidated when it's used:
         1. The password field will change upon a password reset (even if the
            same password is chosen, due to password salting).
         2. The last_login field will usually be updated very shortly after
@@ -88,7 +102,9 @@ class PasswordResetTokenGenerator:
         # Truncate microseconds so that tokens are consistent even if the
         # database doesn't support microseconds.
         login_timestamp = '' if user.last_login is None else user.last_login.replace(microsecond=0, tzinfo=None)
-        return str(user.pk) + user.password + str(login_timestamp) + str(timestamp)
+        email_field = user.get_email_field_name()
+        email = getattr(user, email_field, '') or ''
+        return f'{user.pk}{user.password}{login_timestamp}{timestamp}{email}'
 
     def _num_seconds(self, dt):
         return int((dt - datetime(2001, 1, 1)).total_seconds())

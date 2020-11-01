@@ -158,10 +158,15 @@ The cache backend to use. The built-in cache backends are:
 * ``'django.core.cache.backends.locmem.LocMemCache'``
 * ``'django.core.cache.backends.memcached.MemcachedCache'``
 * ``'django.core.cache.backends.memcached.PyLibMCCache'``
+* ``'django.core.cache.backends.memcached.PyMemcacheCache'``
 
 You can use a cache backend that doesn't ship with Django by setting
 :setting:`BACKEND <CACHES-BACKEND>` to a fully-qualified path of a cache
 backend class (i.e. ``mypackage.backends.whatever.WhateverCache``).
+
+.. versionchanged:: 3.2
+
+    The ``PyMemcacheCache`` backend was added.
 
 .. setting:: CACHES-KEY_FUNCTION
 
@@ -251,7 +256,7 @@ See the :ref:`cache documentation <cache_versioning>` for more information.
 ``CACHE_MIDDLEWARE_ALIAS``
 --------------------------
 
-Default: ``default``
+Default: ``'default'``
 
 The cache connection to use for the :ref:`cache middleware
 <the-per-site-cache>`.
@@ -313,7 +318,7 @@ Default: ``None``
 The domain to be used when setting the CSRF cookie.  This can be useful for
 easily allowing cross-subdomain requests to be excluded from the normal cross
 site request forgery protection.  It should be set to a string such as
-``"example.com"`` to allow a POST request from a form on one subdomain to be
+``".example.com"`` to allow a POST request from a form on one subdomain to be
 accepted by a view served from another subdomain.
 
 Please note that the presence of this setting does not imply that Django's CSRF
@@ -787,6 +792,8 @@ on :ref:`controlling the creation order of test databases
 Default: ``True``
 
 When set to ``False``, migrations won't run when creating the test database.
+This is similar to setting ``None`` as a value in :setting:`MIGRATION_MODULES`,
+but for all apps.
 
 .. setting:: TEST_MIRROR
 
@@ -1295,6 +1302,27 @@ Default email address to use for various automated correspondence from the
 site manager(s). This doesn't include error messages sent to :setting:`ADMINS`
 and :setting:`MANAGERS`; for that, see :setting:`SERVER_EMAIL`.
 
+.. setting:: DEFAULT_HASHING_ALGORITHM
+
+``DEFAULT_HASHING_ALGORITHM``
+-----------------------------
+
+.. versionadded:: 3.1
+
+Default: ``'sha256'``
+
+Default hashing algorithm to use for encoding cookies, password reset tokens in
+the admin site, user sessions, and signatures created by
+:class:`django.core.signing.Signer` and :meth:`django.core.signing.dumps`.
+Algorithm must be ``'sha1'`` or ``'sha256'``. See
+:ref:`release notes <default-hashing-algorithm-usage>` for usage details.
+
+.. deprecated:: 3.1
+
+    This transitional setting is deprecated. Support for it and tokens,
+    cookies, sessions, and signatures that use SHA-1 hashing algorithm will be
+    removed in Django 4.0.
+
 .. setting:: DEFAULT_INDEX_TABLESPACE
 
 ``DEFAULT_INDEX_TABLESPACE``
@@ -1540,10 +1568,9 @@ The numeric mode (i.e. ``0o644``) to set newly uploaded files to. For
 more information about what these modes mean, see the documentation for
 :func:`os.chmod`.
 
-If this isn't given or is ``None``, you'll get operating-system
-dependent behavior. On most platforms, temporary files will have a mode
-of ``0o600``, and files saved from memory will be saved using the
-system's standard umask.
+If ``None``, you'll get operating-system dependent behavior. On most platforms,
+temporary files will have a mode of ``0o600``, and files saved from memory will
+be saved using the system's standard umask.
 
 For security reasons, these permissions aren't applied to the temporary files
 that are stored in :setting:`FILE_UPLOAD_TEMP_DIR`.
@@ -2764,11 +2791,10 @@ See also :setting:`LANGUAGE_CODE`, :setting:`USE_I18N` and :setting:`USE_TZ`.
 Default: ``False``
 
 A boolean that specifies whether to display numbers using a thousand separator.
-When :setting:`USE_L10N` is set to ``True`` and if this is also set to
-``True``, Django will use the values of :setting:`THOUSAND_SEPARATOR` and
-:setting:`NUMBER_GROUPING` to format numbers unless the locale already has an
-existing thousands separator. If there is a thousands separator in the locale
-format, it will have higher precedence and will be applied instead.
+When set to ``True`` and :setting:`USE_L10N` is also ``True``, Django will
+format numbers using the :setting:`NUMBER_GROUPING` and
+:setting:`THOUSAND_SEPARATOR` settings. These settings may also be dictated by
+the locale, which takes precedence.
 
 See also :setting:`DECIMAL_SEPARATOR`, :setting:`NUMBER_GROUPING` and
 :setting:`THOUSAND_SEPARATOR`.
@@ -3159,7 +3185,7 @@ vulnerability into full hijacking of a user's session. There aren't many good
 reasons for turning this off. Your code shouldn't read session cookies from
 JavaScript.
 
-.. _HttpOnly: https://www.owasp.org/index.php/HttpOnly
+.. _HttpOnly: https://owasp.org/www-community/HttpOnly
 
 .. setting:: SESSION_COOKIE_NAME
 
@@ -3221,6 +3247,11 @@ Possible values for the setting are:
   cross-site requests.
 
 * ``False``: disables the flag.
+
+.. note::
+
+    Modern browsers provide a more secure default policy for the ``SameSite``
+    flag and will assume ``Lax`` for cookies without an explicit value set.
 
 .. versionchanged:: 3.1
 

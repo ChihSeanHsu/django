@@ -9,7 +9,9 @@ from django.contrib.staticfiles.finders import get_finder, get_finders
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.storage import default_storage
-from django.db import connection, connections, models, router
+from django.db import (
+    IntegrityError, connection, connections, models, router, transaction,
+)
 from django.forms import EmailField, IntegerField
 from django.http import HttpResponse
 from django.template.loader import render_to_string
@@ -766,10 +768,29 @@ class HTMLEqualTests(SimpleTestCase):
         dom2 = parse_html('<p>foo<p>bar</p></p>')
         self.assertEqual(dom2.count(dom1), 0)
 
-        # html with a root element contains the same html with no root element
+        # HTML with a root element contains the same HTML with no root element.
         dom1 = parse_html('<p>foo</p><p>bar</p>')
         dom2 = parse_html('<div><p>foo</p><p>bar</p></div>')
         self.assertEqual(dom2.count(dom1), 1)
+
+        # Target of search is a sequence of child elements and appears more
+        # than once.
+        dom2 = parse_html('<div><p>foo</p><p>bar</p><p>foo</p><p>bar</p></div>')
+        self.assertEqual(dom2.count(dom1), 2)
+
+        # Searched HTML has additional children.
+        dom1 = parse_html('<a/><b/>')
+        dom2 = parse_html('<a/><b/><c/>')
+        self.assertEqual(dom2.count(dom1), 1)
+
+        # No match found in children.
+        dom1 = parse_html('<b/><a/>')
+        self.assertEqual(dom2.count(dom1), 0)
+
+        # Target of search found among children and grandchildren.
+        dom1 = parse_html('<b/><b/>')
+        dom2 = parse_html('<a><b/><b/></a><b/><b/>')
+        self.assertEqual(dom2.count(dom1), 2)
 
     def test_parsing_errors(self):
         with self.assertRaises(AssertionError):
@@ -1273,6 +1294,71 @@ class TestBadSetUpTestData(TestCase):
         self.assertFalse(self._in_atomic_block)
 
 
+class CaptureOnCommitCallbacksTests(TestCase):
+    databases = {'default', 'other'}
+    callback_called = False
+
+    def enqueue_callback(self, using='default'):
+        def hook():
+            self.callback_called = True
+
+        transaction.on_commit(hook, using=using)
+
+    def test_no_arguments(self):
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.enqueue_callback()
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertIs(self.callback_called, False)
+        callbacks[0]()
+        self.assertIs(self.callback_called, True)
+
+    def test_using(self):
+        with self.captureOnCommitCallbacks(using='other') as callbacks:
+            self.enqueue_callback(using='other')
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertIs(self.callback_called, False)
+        callbacks[0]()
+        self.assertIs(self.callback_called, True)
+
+    def test_different_using(self):
+        with self.captureOnCommitCallbacks(using='default') as callbacks:
+            self.enqueue_callback(using='other')
+
+        self.assertEqual(callbacks, [])
+
+    def test_execute(self):
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            self.enqueue_callback()
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertIs(self.callback_called, True)
+
+    def test_pre_callback(self):
+        def pre_hook():
+            pass
+
+        transaction.on_commit(pre_hook, using='default')
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.enqueue_callback()
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertNotEqual(callbacks[0], pre_hook)
+
+    def test_with_rolled_back_savepoint(self):
+        with self.captureOnCommitCallbacks() as callbacks:
+            try:
+                with transaction.atomic():
+                    self.enqueue_callback()
+                    raise IntegrityError
+            except IntegrityError:
+                # Inner transaction.atomic() has been rolled back.
+                pass
+
+        self.assertEqual(callbacks, [])
+
+
 class DisallowedDatabaseQueriesTests(SimpleTestCase):
     def test_disallowed_database_connections(self):
         expected_message = (
@@ -1410,4 +1496,27 @@ class TestContextDecoratorTests(SimpleTestCase):
         self.assertFalse(mock_disable.called)
         with self.assertRaisesMessage(NotImplementedError, 'reraised'):
             decorated_test_class.setUp()
+        decorated_test_class.doCleanups()
         self.assertTrue(mock_disable.called)
+
+    def test_cleanups_run_after_tearDown(self):
+        calls = []
+
+        class SaveCallsDecorator(TestContextDecorator):
+            def enable(self):
+                calls.append('enable')
+
+            def disable(self):
+                calls.append('disable')
+
+        class AddCleanupInSetUp(unittest.TestCase):
+            def setUp(self):
+                calls.append('setUp')
+                self.addCleanup(lambda: calls.append('cleanup'))
+
+        decorator = SaveCallsDecorator()
+        decorated_test_class = decorator.__call__(AddCleanupInSetUp)()
+        decorated_test_class.setUp()
+        decorated_test_class.tearDown()
+        decorated_test_class.doCleanups()
+        self.assertEqual(calls, ['enable', 'setUp', 'cleanup', 'disable'])

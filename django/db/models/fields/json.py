@@ -45,6 +45,11 @@ class JSONField(CheckFieldDefaultMixin, Field):
             if not router.allow_migrate_model(db, self.model):
                 continue
             connection = connections[db]
+            if (
+                self.model._meta.required_db_vendor and
+                self.model._meta.required_db_vendor != connection.vendor
+            ):
+                continue
             if not (
                 'supports_json_field' in self.model._meta.required_db_features or
                 connection.features.supports_json_field
@@ -70,8 +75,6 @@ class JSONField(CheckFieldDefaultMixin, Field):
     def from_db_value(self, value, expression, connection):
         if value is None:
             return value
-        if connection.features.has_native_json_field and self.decoder is None:
-            return value
         try:
             return json.loads(value, cls=self.decoder)
         except json.JSONDecodeError:
@@ -90,14 +93,6 @@ class JSONField(CheckFieldDefaultMixin, Field):
         if transform:
             return transform
         return KeyTransformFactory(name)
-
-    def select_format(self, compiler, sql, params):
-        if (
-            compiler.connection.features.has_native_json_field and
-            self.decoder is not None
-        ):
-            return compiler.connection.ops.json_cast_text_sql(sql), params
-        return super().select_format(compiler, sql, params)
 
     def validate(self, value, model_instance):
         super().validate(value, model_instance)
@@ -140,30 +135,14 @@ class DataContains(PostgresOperatorLookup):
     postgres_operator = '@>'
 
     def as_sql(self, compiler, connection):
+        if not connection.features.supports_json_field_contains:
+            raise NotSupportedError(
+                'contains lookup is not supported on this database backend.'
+            )
         lhs, lhs_params = self.process_lhs(compiler, connection)
         rhs, rhs_params = self.process_rhs(compiler, connection)
         params = tuple(lhs_params) + tuple(rhs_params)
         return 'JSON_CONTAINS(%s, %s)' % (lhs, rhs), params
-
-    def as_oracle(self, compiler, connection):
-        if isinstance(self.rhs, KeyTransform):
-            return HasKey(self.lhs, self.rhs).as_oracle(compiler, connection)
-        lhs, lhs_params = self.process_lhs(compiler, connection)
-        params = tuple(lhs_params)
-        sql = (
-            "JSON_QUERY(%s, '$%s' WITH WRAPPER) = "
-            "JSON_QUERY('%s', '$.value' WITH WRAPPER)"
-        )
-        rhs = json.loads(self.rhs)
-        if isinstance(rhs, dict):
-            if not rhs:
-                return "DBMS_LOB.SUBSTR(%s) LIKE '{%%%%}'" % lhs, params
-            return ' AND '.join([
-                sql % (
-                    lhs, '.%s' % json.dumps(key), json.dumps({'value': value}),
-                ) for key, value in rhs.items()
-            ]), params
-        return sql % (lhs, '', json.dumps({'value': rhs})), params
 
 
 class ContainedBy(PostgresOperatorLookup):
@@ -171,13 +150,14 @@ class ContainedBy(PostgresOperatorLookup):
     postgres_operator = '<@'
 
     def as_sql(self, compiler, connection):
+        if not connection.features.supports_json_field_contains:
+            raise NotSupportedError(
+                'contained_by lookup is not supported on this database backend.'
+            )
         lhs, lhs_params = self.process_lhs(compiler, connection)
         rhs, rhs_params = self.process_rhs(compiler, connection)
         params = tuple(rhs_params) + tuple(lhs_params)
         return 'JSON_CONTAINS(%s, %s)' % (rhs, lhs), params
-
-    def as_oracle(self, compiler, connection):
-        raise NotSupportedError('contained_by lookup is not supported on Oracle.')
 
 
 class HasKeyLookup(PostgresOperatorLookup):
@@ -393,6 +373,29 @@ class KeyTransformIsNull(lookups.IsNull):
         return super().as_sql(compiler, connection)
 
 
+class KeyTransformIn(lookups.In):
+    def resolve_expression_parameter(self, compiler, connection, sql, param):
+        sql, params = super().resolve_expression_parameter(
+            compiler, connection, sql, param,
+        )
+        if (
+            not hasattr(param, 'as_sql') and
+            not connection.features.has_native_json_field
+        ):
+            if connection.vendor == 'oracle':
+                value = json.loads(param)
+                if isinstance(value, (list, dict)):
+                    sql = "JSON_QUERY(%s, '$.value')"
+                else:
+                    sql = "JSON_VALUE(%s, '$.value')"
+                params = (json.dumps({'value': value}),)
+            elif connection.vendor in {'sqlite', 'mysql'}:
+                sql = "JSON_EXTRACT(%s, '$')"
+        if connection.vendor == 'mysql' and connection.mysql_is_mariadb:
+            sql = 'JSON_UNQUOTE(%s)' % sql
+        return sql, params
+
+
 class KeyTransformExact(JSONExact):
     def process_lhs(self, compiler, connection):
         lhs, lhs_params = super().process_lhs(compiler, connection)
@@ -446,10 +449,6 @@ class KeyTransformIContains(CaseInsensitiveMixin, KeyTransformTextLookupMixin, l
     pass
 
 
-class KeyTransformContains(KeyTransformTextLookupMixin, lookups.Contains):
-    pass
-
-
 class KeyTransformStartsWith(KeyTransformTextLookupMixin, lookups.StartsWith):
     pass
 
@@ -498,10 +497,10 @@ class KeyTransformGte(KeyTransformNumericLookupMixin, lookups.GreaterThanOrEqual
     pass
 
 
+KeyTransform.register_lookup(KeyTransformIn)
 KeyTransform.register_lookup(KeyTransformExact)
 KeyTransform.register_lookup(KeyTransformIExact)
 KeyTransform.register_lookup(KeyTransformIsNull)
-KeyTransform.register_lookup(KeyTransformContains)
 KeyTransform.register_lookup(KeyTransformIContains)
 KeyTransform.register_lookup(KeyTransformStartsWith)
 KeyTransform.register_lookup(KeyTransformIStartsWith)

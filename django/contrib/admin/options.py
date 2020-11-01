@@ -44,7 +44,9 @@ from django.utils.decorators import method_decorator
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from django.utils.safestring import mark_safe
-from django.utils.text import capfirst, format_lazy, get_text_list
+from django.utils.text import (
+    capfirst, format_lazy, get_text_list, smart_split, unescape_string_literal,
+)
 from django.utils.translation import gettext as _, ngettext
 from django.views.decorators.csrf import csrf_protect
 from django.views.generic import RedirectView
@@ -294,7 +296,7 @@ class BaseModelAdmin(metaclass=forms.MediaDefiningClass):
 
         if callable(self.view_on_site):
             return self.view_on_site(obj)
-        elif self.view_on_site and hasattr(obj, 'get_absolute_url'):
+        elif hasattr(obj, 'get_absolute_url'):
             # use the ContentType lookup if view_on_site is True
             return reverse('admin:view_on_site', kwargs={
                 'content_type_id': get_content_type_for_model(obj).pk,
@@ -806,7 +808,7 @@ class ModelAdmin(BaseModelAdmin):
 
         The default implementation creates an admin LogEntry object.
         """
-        from django.contrib.admin.models import LogEntry, ADDITION
+        from django.contrib.admin.models import ADDITION, LogEntry
         return LogEntry.objects.log_action(
             user_id=request.user.pk,
             content_type_id=get_content_type_for_model(object).pk,
@@ -822,7 +824,7 @@ class ModelAdmin(BaseModelAdmin):
 
         The default implementation creates an admin LogEntry object.
         """
-        from django.contrib.admin.models import LogEntry, CHANGE
+        from django.contrib.admin.models import CHANGE, LogEntry
         return LogEntry.objects.log_action(
             user_id=request.user.pk,
             content_type_id=get_content_type_for_model(object).pk,
@@ -839,7 +841,7 @@ class ModelAdmin(BaseModelAdmin):
 
         The default implementation creates an admin LogEntry object.
         """
-        from django.contrib.admin.models import LogEntry, DELETION
+        from django.contrib.admin.models import DELETION, LogEntry
         return LogEntry.objects.log_action(
             user_id=request.user.pk,
             content_type_id=get_content_type_for_model(object).pk,
@@ -1022,7 +1024,9 @@ class ModelAdmin(BaseModelAdmin):
         if search_fields and search_term:
             orm_lookups = [construct_search(str(search_field))
                            for search_field in search_fields]
-            for bit in search_term.split():
+            for bit in smart_split(search_term):
+                if bit.startswith(('"', "'")):
+                    bit = unescape_string_literal(bit)
                 or_queries = [models.Q(**{orm_lookup: bit})
                               for orm_lookup in orm_lookups]
                 queryset = queryset.filter(reduce(operator.or_, or_queries))
@@ -1623,6 +1627,7 @@ class ModelAdmin(BaseModelAdmin):
         context = {
             **self.admin_site.each_context(request),
             'title': title % opts.verbose_name,
+            'subtitle': str(obj) if obj else None,
             'adminform': adminForm,
             'object_id': object_id,
             'original': obj,
@@ -1811,6 +1816,7 @@ class ModelAdmin(BaseModelAdmin):
             'selection_note': _('0 of %(cnt)s selected') % {'cnt': len(cl.result_list)},
             'selection_note_all': selection_note_all % {'total_count': cl.result_count},
             'title': cl.title,
+            'subtitle': None,
             'is_popup': cl.is_popup,
             'to_field': cl.to_field,
             'cl': cl,
@@ -1906,6 +1912,7 @@ class ModelAdmin(BaseModelAdmin):
     def history_view(self, request, object_id, extra_context=None):
         "The 'history' admin view for this model."
         from django.contrib.admin.models import LogEntry
+
         # First check if the user can see this history.
         model = self.model
         obj = self.get_object(request, unquote(object_id))

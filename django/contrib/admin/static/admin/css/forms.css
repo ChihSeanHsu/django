@@ -22,10 +22,6 @@ form .form-row p {
     padding-left: 0;
 }
 
-.hidden {
-    display: none;
-}
-
 /* FORM LABELS */
 
 label {
@@ -430,6 +426,7 @@ body.popup .submit-row {
 
 .inline-related.tabular fieldset.module table {
     width: 100%;
+    overflow-x: scroll;
 }
 
 .last-related fieldset {

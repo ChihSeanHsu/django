@@ -672,6 +672,18 @@ class DateFunctionTests(TestCase):
                 lambda m: (m.start_datetime, m.truncated)
             )
 
+        def test_datetime_to_time_kind(kind):
+            self.assertQuerysetEqual(
+                DTModel.objects.annotate(
+                    truncated=Trunc('start_datetime', kind, output_field=TimeField()),
+                ).order_by('start_datetime'),
+                [
+                    (start_datetime, truncate_to(start_datetime.time(), kind)),
+                    (end_datetime, truncate_to(end_datetime.time(), kind)),
+                ],
+                lambda m: (m.start_datetime, m.truncated),
+            )
+
         test_date_kind('year')
         test_date_kind('quarter')
         test_date_kind('month')
@@ -688,6 +700,9 @@ class DateFunctionTests(TestCase):
         test_datetime_kind('hour')
         test_datetime_kind('minute')
         test_datetime_kind('second')
+        test_datetime_to_time_kind('hour')
+        test_datetime_to_time_kind('minute')
+        test_datetime_to_time_kind('second')
 
         qs = DTModel.objects.filter(start_datetime__date=Trunc('start_datetime', 'day', output_field=DateField()))
         self.assertEqual(qs.count(), 2)
@@ -1111,6 +1126,18 @@ class DateFunctionWithTimeZoneTests(DateFunctionTests):
             self.assertEqual(model.day_melb, 16)
             self.assertEqual(model.day_utc, 15)
 
+    def test_extract_invalid_field_with_timezone(self):
+        melb = pytz.timezone('Australia/Melbourne')
+        msg = 'tzinfo can only be used with DateTimeField.'
+        with self.assertRaisesMessage(ValueError, msg):
+            DTModel.objects.annotate(
+                day_melb=Extract('start_date', 'day', tzinfo=melb),
+            ).get()
+        with self.assertRaisesMessage(ValueError, msg):
+            DTModel.objects.annotate(
+                hour_melb=Extract('start_time', 'hour', tzinfo=melb),
+            ).get()
+
     def test_trunc_timezone_applied_before_truncation(self):
         start_datetime = datetime(2016, 1, 1, 1, 30, 50, 321)
         end_datetime = datetime(2016, 6, 15, 14, 10, 50, 123)
@@ -1124,14 +1151,24 @@ class DateFunctionWithTimeZoneTests(DateFunctionTests):
         model = DTModel.objects.annotate(
             melb_year=TruncYear('start_datetime', tzinfo=melb),
             pacific_year=TruncYear('start_datetime', tzinfo=pacific),
+            melb_date=TruncDate('start_datetime', tzinfo=melb),
+            pacific_date=TruncDate('start_datetime', tzinfo=pacific),
+            melb_time=TruncTime('start_datetime', tzinfo=melb),
+            pacific_time=TruncTime('start_datetime', tzinfo=pacific),
         ).order_by('start_datetime').get()
 
+        melb_start_datetime = start_datetime.astimezone(melb)
+        pacific_start_datetime = start_datetime.astimezone(pacific)
         self.assertEqual(model.start_datetime, start_datetime)
         self.assertEqual(model.melb_year, truncate_to(start_datetime, 'year', melb))
         self.assertEqual(model.pacific_year, truncate_to(start_datetime, 'year', pacific))
         self.assertEqual(model.start_datetime.year, 2016)
         self.assertEqual(model.melb_year.year, 2016)
         self.assertEqual(model.pacific_year.year, 2015)
+        self.assertEqual(model.melb_date, melb_start_datetime.date())
+        self.assertEqual(model.pacific_date, pacific_start_datetime.date())
+        self.assertEqual(model.melb_time, melb_start_datetime.time())
+        self.assertEqual(model.pacific_time, pacific_start_datetime.time())
 
     def test_trunc_ambiguous_and_invalid_times(self):
         sao = pytz.timezone('America/Sao_Paulo')
@@ -1183,38 +1220,60 @@ class DateFunctionWithTimeZoneTests(DateFunctionTests):
                 lambda m: (m.start_datetime, m.truncated)
             )
 
-        def test_date_kind(kind):
+        def test_datetime_to_date_kind(kind):
             self.assertQuerysetEqual(
                 DTModel.objects.annotate(
-                    truncated=Trunc('start_date', kind, output_field=DateField(), tzinfo=melb)
+                    truncated=Trunc(
+                        'start_datetime',
+                        kind,
+                        output_field=DateField(),
+                        tzinfo=melb,
+                    ),
                 ).order_by('start_datetime'),
                 [
-                    (start_datetime, truncate_to(start_datetime.date(), kind)),
-                    (end_datetime, truncate_to(end_datetime.date(), kind))
+                    (
+                        start_datetime,
+                        truncate_to(start_datetime.astimezone(melb).date(), kind),
+                    ),
+                    (
+                        end_datetime,
+                        truncate_to(end_datetime.astimezone(melb).date(), kind),
+                    ),
                 ],
-                lambda m: (m.start_datetime, m.truncated)
+                lambda m: (m.start_datetime, m.truncated),
             )
 
-        def test_time_kind(kind):
+        def test_datetime_to_time_kind(kind):
             self.assertQuerysetEqual(
                 DTModel.objects.annotate(
-                    truncated=Trunc('start_time', kind, output_field=TimeField(), tzinfo=melb)
+                    truncated=Trunc(
+                        'start_datetime',
+                        kind,
+                        output_field=TimeField(),
+                        tzinfo=melb,
+                    )
                 ).order_by('start_datetime'),
                 [
-                    (start_datetime, truncate_to(start_datetime.time(), kind)),
-                    (end_datetime, truncate_to(end_datetime.time(), kind))
+                    (
+                        start_datetime,
+                        truncate_to(start_datetime.astimezone(melb).time(), kind),
+                    ),
+                    (
+                        end_datetime,
+                        truncate_to(end_datetime.astimezone(melb).time(), kind),
+                    ),
                 ],
-                lambda m: (m.start_datetime, m.truncated)
+                lambda m: (m.start_datetime, m.truncated),
             )
 
-        test_date_kind('year')
-        test_date_kind('quarter')
-        test_date_kind('month')
-        test_date_kind('week')
-        test_date_kind('day')
-        test_time_kind('hour')
-        test_time_kind('minute')
-        test_time_kind('second')
+        test_datetime_to_date_kind('year')
+        test_datetime_to_date_kind('quarter')
+        test_datetime_to_date_kind('month')
+        test_datetime_to_date_kind('week')
+        test_datetime_to_date_kind('day')
+        test_datetime_to_time_kind('hour')
+        test_datetime_to_time_kind('minute')
+        test_datetime_to_time_kind('second')
         test_datetime_kind('year')
         test_datetime_kind('quarter')
         test_datetime_kind('month')
@@ -1226,3 +1285,15 @@ class DateFunctionWithTimeZoneTests(DateFunctionTests):
 
         qs = DTModel.objects.filter(start_datetime__date=Trunc('start_datetime', 'day', output_field=DateField()))
         self.assertEqual(qs.count(), 2)
+
+    def test_trunc_invalid_field_with_timezone(self):
+        melb = pytz.timezone('Australia/Melbourne')
+        msg = 'tzinfo can only be used with DateTimeField.'
+        with self.assertRaisesMessage(ValueError, msg):
+            DTModel.objects.annotate(
+                day_melb=Trunc('start_date', 'day', tzinfo=melb),
+            ).get()
+        with self.assertRaisesMessage(ValueError, msg):
+            DTModel.objects.annotate(
+                hour_melb=Trunc('start_time', 'hour', tzinfo=melb),
+            ).get()

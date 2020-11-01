@@ -90,7 +90,14 @@ class BaseFormSet:
             form = ManagementForm(self.data, auto_id=self.auto_id, prefix=self.prefix)
             if not form.is_valid():
                 raise ValidationError(
-                    _('ManagementForm data is missing or has been tampered with'),
+                    _(
+                        'ManagementForm data is missing or has been tampered '
+                        'with. Missing fields: %(field_names)s'
+                    ) % {
+                        'field_names': ', '.join(
+                            form.add_prefix(field_name) for field_name in form.errors
+                        ),
+                    },
                     code='missing_management_form',
                 )
         else:
@@ -216,8 +223,7 @@ class BaseFormSet:
         # that have had their deletion widget set to True
         if not hasattr(self, '_deleted_form_indexes'):
             self._deleted_form_indexes = []
-            for i in range(0, self.total_form_count()):
-                form = self.forms[i]
+            for i, form in enumerate(self.forms):
                 # if this is an extra form and hasn't changed, don't consider it
                 if i >= self.initial_form_count() and not form.has_changed():
                     continue
@@ -239,8 +245,7 @@ class BaseFormSet:
         # by the form data.
         if not hasattr(self, '_ordering'):
             self._ordering = []
-            for i in range(0, self.total_form_count()):
-                form = self.forms[i]
+            for i, form in enumerate(self.forms):
                 # if this is an extra form and hasn't changed, don't consider it
                 if i >= self.initial_form_count() and not form.has_changed():
                     continue
@@ -306,8 +311,7 @@ class BaseFormSet:
         forms_valid = True
         # This triggers a full clean.
         self.errors
-        for i in range(0, self.total_form_count()):
-            form = self.forms[i]
+        for form in self.forms:
             if self.can_delete and self._should_delete_form(form):
                 # This form is going to be deleted so any of its errors
                 # shouldn't cause the entire formset to be invalid.
@@ -326,8 +330,7 @@ class BaseFormSet:
 
         if not self.is_bound:  # Stop further processing.
             return
-        for i in range(0, self.total_form_count()):
-            form = self.forms[i]
+        for i, form in enumerate(self.forms):
             # Empty forms are unchanged forms beyond those with initial data.
             if not form.has_changed() and i >= self.initial_form_count():
                 empty_forms_count += 1
@@ -342,15 +345,15 @@ class BaseFormSet:
                     self.total_form_count() - len(self.deleted_forms) > self.max_num) or \
                     self.management_form.cleaned_data[TOTAL_FORM_COUNT] > self.absolute_max:
                 raise ValidationError(ngettext(
-                    "Please submit %d or fewer forms.",
-                    "Please submit %d or fewer forms.", self.max_num) % self.max_num,
+                    "Please submit at most %d form.",
+                    "Please submit at most %d forms.", self.max_num) % self.max_num,
                     code='too_many_forms',
                 )
             if (self.validate_min and
                     self.total_form_count() - len(self.deleted_forms) - empty_forms_count < self.min_num):
                 raise ValidationError(ngettext(
-                    "Please submit %d or more forms.",
-                    "Please submit %d or more forms.", self.min_num) % self.min_num,
+                    "Please submit at least %d form.",
+                    "Please submit at least %d forms.", self.min_num) % self.min_num,
                     code='too_few_forms')
             # Give self.clean() a chance to do cross-form validation.
             self.clean()
@@ -372,9 +375,10 @@ class BaseFormSet:
 
     def add_fields(self, form, index):
         """A hook for adding extra fields on to each form instance."""
+        initial_form_count = self.initial_form_count()
         if self.can_order:
             # Only pre-fill the ordering field for initial forms.
-            if index is not None and index < self.initial_form_count():
+            if index is not None and index < initial_form_count:
                 form.fields[ORDERING_FIELD_NAME] = IntegerField(
                     label=_('Order'),
                     initial=index + 1,
@@ -387,7 +391,7 @@ class BaseFormSet:
                     required=False,
                     widget=self.get_ordering_widget(),
                 )
-        if self.can_delete:
+        if self.can_delete and (self.can_delete_extra or index < initial_form_count):
             form.fields[DELETION_FIELD_NAME] = BooleanField(label=_('Delete'), required=False)
 
     def add_prefix(self, index):
@@ -433,7 +437,8 @@ class BaseFormSet:
 
 def formset_factory(form, formset=BaseFormSet, extra=1, can_order=False,
                     can_delete=False, max_num=None, validate_max=False,
-                    min_num=None, validate_min=False, absolute_max=None):
+                    min_num=None, validate_min=False, absolute_max=None,
+                    can_delete_extra=True):
     """Return a FormSet for the given form class."""
     if min_num is None:
         min_num = DEFAULT_MIN_NUM
@@ -453,6 +458,7 @@ def formset_factory(form, formset=BaseFormSet, extra=1, can_order=False,
         'extra': extra,
         'can_order': can_order,
         'can_delete': can_delete,
+        'can_delete_extra': can_delete_extra,
         'min_num': min_num,
         'max_num': max_num,
         'absolute_max': absolute_max,

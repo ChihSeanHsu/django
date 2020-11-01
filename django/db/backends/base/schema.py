@@ -61,6 +61,7 @@ class BaseDatabaseSchemaEditor:
     sql_alter_column_not_null = "ALTER COLUMN %(column)s SET NOT NULL"
     sql_alter_column_default = "ALTER COLUMN %(column)s SET DEFAULT %(default)s"
     sql_alter_column_no_default = "ALTER COLUMN %(column)s DROP DEFAULT"
+    sql_alter_column_collate = "ALTER COLUMN %(column)s TYPE %(type)s%(collation)s"
     sql_delete_column = "ALTER TABLE %(table)s DROP COLUMN %(column)s CASCADE"
     sql_rename_column = "ALTER TABLE %(table)s RENAME COLUMN %(old_column)s TO %(new_column)s"
     sql_update_with_default = "UPDATE %(table)s SET %(column)s = %(default)s WHERE %(column)s IS NULL"
@@ -215,6 +216,10 @@ class BaseDatabaseSchemaEditor:
         # Check for fields that aren't actually columns (e.g. M2M)
         if sql is None:
             return None, None
+        # Collation.
+        collation = getattr(field, 'db_collation', None)
+        if collation:
+            sql += self._collate_sql(collation)
         # Work out nullability
         null = field.null
         # If we were told to include a default value, do so
@@ -466,8 +471,10 @@ class BaseDatabaseSchemaEditor:
             if self.sql_create_column_inline_fk:
                 to_table = field.remote_field.model._meta.db_table
                 to_column = field.remote_field.model._meta.get_field(field.remote_field.field_name).column
+                namespace, _ = split_identifier(model._meta.db_table)
                 definition += " " + self.sql_create_column_inline_fk % {
                     'name': self._fk_constraint_name(model, field, constraint_suffix),
+                    'namespace': '%s.' % self.quote_name(namespace) if namespace else '',
                     'column': self.quote_name(field.column),
                     'to_table': self.quote_name(to_table),
                     'to_column': self.quote_name(to_column),
@@ -536,6 +543,8 @@ class BaseDatabaseSchemaEditor:
         If `strict` is True, raise errors if the old column does not match
         `old_field` precisely.
         """
+        if not self._field_should_be_altered(old_field, new_field):
+            return
         # Ensure this field is even column-based
         old_db_params = old_field.db_parameters(connection=self.connection)
         old_type = old_db_params['type']
@@ -672,8 +681,15 @@ class BaseDatabaseSchemaEditor:
         actions = []
         null_actions = []
         post_actions = []
+        # Collation change?
+        old_collation = getattr(old_field, 'db_collation', None)
+        new_collation = getattr(new_field, 'db_collation', None)
+        if old_collation != new_collation:
+            # Collation change handles also a type change.
+            fragment = self._alter_column_collation_sql(model, new_field, new_type, new_collation)
+            actions.append(fragment)
         # Type change?
-        if old_type != new_type:
+        elif old_type != new_type:
             fragment, other_actions = self._alter_column_type_sql(model, old_field, new_field, new_type)
             actions.append(fragment)
             post_actions.extend(other_actions)
@@ -891,6 +907,16 @@ class BaseDatabaseSchemaEditor:
             [],
         )
 
+    def _alter_column_collation_sql(self, model, new_field, new_type, new_collation):
+        return (
+            self.sql_alter_column_collate % {
+                'column': self.quote_name(new_field.column),
+                'type': new_type,
+                'collation': self._collate_sql(new_collation) if new_collation else '',
+            },
+            [],
+        )
+
     def _alter_many_to_many(self, model, old_field, new_field, strict):
         """Alter M2Ms to repoint their to= endpoints."""
         # Rename the through table
@@ -1032,6 +1058,35 @@ class BaseDatabaseSchemaEditor:
             output.append(self._create_index_sql(model, [field]))
         return output
 
+    def _field_should_be_altered(self, old_field, new_field):
+        _, old_path, old_args, old_kwargs = old_field.deconstruct()
+        _, new_path, new_args, new_kwargs = new_field.deconstruct()
+        # Don't alter when:
+        # - changing only a field name
+        # - changing an attribute that doesn't affect the schema
+        # - adding only a db_column and the column name is not changed
+        non_database_attrs = [
+            'blank',
+            'db_column',
+            'editable',
+            'error_messages',
+            'help_text',
+            'limit_choices_to',
+            # Database-level options are not supported, see #21961.
+            'on_delete',
+            'related_name',
+            'related_query_name',
+            'validators',
+            'verbose_name',
+        ]
+        for attr in non_database_attrs:
+            old_kwargs.pop(attr, None)
+            new_kwargs.pop(attr, None)
+        return (
+            self.quote_name(old_field.column) != self.quote_name(new_field.column) or
+            (old_path, old_args, old_kwargs) != (new_path, new_args, new_kwargs)
+        )
+
     def _field_should_be_indexed(self, model, field):
         return field.db_index and not field.unique
 
@@ -1092,13 +1147,16 @@ class BaseDatabaseSchemaEditor:
         if deferrable == Deferrable.IMMEDIATE:
             return ' DEFERRABLE INITIALLY IMMEDIATE'
 
-    def _unique_sql(self, model, fields, name, condition=None, deferrable=None, include=None):
+    def _unique_sql(
+        self, model, fields, name, condition=None, deferrable=None,
+        include=None, opclasses=None,
+    ):
         if (
             deferrable and
             not self.connection.features.supports_deferrable_unique_constraints
         ):
             return None
-        if condition or include:
+        if condition or include or opclasses:
             # Databases support conditional and covering unique constraints via
             # a unique index.
             sql = self._create_unique_sql(
@@ -1107,6 +1165,7 @@ class BaseDatabaseSchemaEditor:
                 name=name,
                 condition=condition,
                 include=include,
+                opclasses=opclasses,
             )
             if sql:
                 self.deferred_sql.append(sql)
@@ -1120,7 +1179,10 @@ class BaseDatabaseSchemaEditor:
             'constraint': constraint,
         }
 
-    def _create_unique_sql(self, model, columns, name=None, condition=None, deferrable=None, include=None):
+    def _create_unique_sql(
+        self, model, columns, name=None, condition=None, deferrable=None,
+        include=None, opclasses=None,
+    ):
         if (
             (
                 deferrable and
@@ -1139,8 +1201,8 @@ class BaseDatabaseSchemaEditor:
             name = IndexName(model._meta.db_table, columns, '_uniq', create_unique_name)
         else:
             name = self.quote_name(name)
-        columns = Columns(table, columns, self.quote_name)
-        if condition or include:
+        columns = self._index_columns(table, columns, col_suffixes=(), opclasses=opclasses)
+        if condition or include or opclasses:
             sql = self.sql_create_unique_index
         else:
             sql = self.sql_create_unique
@@ -1154,7 +1216,10 @@ class BaseDatabaseSchemaEditor:
             include=self._index_include_sql(model, include),
         )
 
-    def _delete_unique_sql(self, model, name, condition=None, deferrable=None, include=None):
+    def _delete_unique_sql(
+        self, model, name, condition=None, deferrable=None, include=None,
+        opclasses=None,
+    ):
         if (
             (
                 deferrable and
@@ -1164,7 +1229,7 @@ class BaseDatabaseSchemaEditor:
             (include and not self.connection.features.supports_covering_indexes)
         ):
             return None
-        if condition or include:
+        if condition or include or opclasses:
             sql = self.sql_delete_index
         else:
             sql = self.sql_delete_unique
@@ -1246,6 +1311,9 @@ class BaseDatabaseSchemaEditor:
 
     def _delete_primary_key_sql(self, model, name):
         return self._delete_constraint_sql(self.sql_delete_pk, model, name)
+
+    def _collate_sql(self, collation):
+        return ' COLLATE ' + self.quote_name(collation)
 
     def remove_procedure(self, procedure_name, param_types=()):
         sql = self.sql_delete_procedure % {

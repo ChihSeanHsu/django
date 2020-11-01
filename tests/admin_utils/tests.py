@@ -6,7 +6,8 @@ from django.conf import settings
 from django.contrib.admin import helpers
 from django.contrib.admin.utils import (
     NestedObjects, display_for_field, display_for_value, flatten,
-    flatten_fieldsets, label_for_field, lookup_field, quote,
+    flatten_fieldsets, help_text_for_field, label_for_field, lookup_field,
+    quote,
 )
 from django.db import DEFAULT_DB_ALIAS, models
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -185,6 +186,7 @@ class UtilsTests(SimpleTestCase):
             ({'a': {'b': 'c'}}, '{"a": {"b": "c"}}'),
             (['a', 'b'], '["a", "b"]'),
             ('a', '"a"'),
+            ({'a': '你好 世界'}, '{"a": "你好 世界"}'),
             ({('a', 'b'): 'c'}, "{('a', 'b'): 'c'}"),  # Invalid JSON.
         ]
         for value, display_value in tests:
@@ -333,6 +335,16 @@ class UtilsTests(SimpleTestCase):
             label_for_field("test_from_property", Article, model_admin=MockModelAdmin),
             'property short description'
         )
+
+    def test_help_text_for_field(self):
+        tests = [
+            ('article', ''),
+            ('unknown', ''),
+            ('hist', 'History help text'),
+        ]
+        for name, help_text in tests:
+            with self.subTest(name=name):
+                self.assertEqual(help_text_for_field(name, Article), help_text)
 
     def test_related_name(self):
         """

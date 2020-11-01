@@ -5,9 +5,9 @@ import datetime
 import decimal
 import functools
 import hashlib
-import json
 import math
 import operator
+import random
 import re
 import statistics
 import warnings
@@ -74,7 +74,6 @@ Database.register_converter("bool", b'1'.__eq__)
 Database.register_converter("time", decoder(parse_time))
 Database.register_converter("datetime", decoder(parse_datetime))
 Database.register_converter("timestamp", decoder(parse_datetime))
-Database.register_converter("TIMESTAMP", decoder(parse_datetime))
 
 Database.register_adapter(decimal.Decimal, str)
 
@@ -214,13 +213,13 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         else:
             create_deterministic_function = conn.create_function
         create_deterministic_function('django_date_extract', 2, _sqlite_datetime_extract)
-        create_deterministic_function('django_date_trunc', 2, _sqlite_date_trunc)
+        create_deterministic_function('django_date_trunc', 4, _sqlite_date_trunc)
         create_deterministic_function('django_datetime_cast_date', 3, _sqlite_datetime_cast_date)
         create_deterministic_function('django_datetime_cast_time', 3, _sqlite_datetime_cast_time)
         create_deterministic_function('django_datetime_extract', 4, _sqlite_datetime_extract)
         create_deterministic_function('django_datetime_trunc', 4, _sqlite_datetime_trunc)
         create_deterministic_function('django_time_extract', 2, _sqlite_time_extract)
-        create_deterministic_function('django_time_trunc', 2, _sqlite_time_trunc)
+        create_deterministic_function('django_time_trunc', 4, _sqlite_time_trunc)
         create_deterministic_function('django_time_diff', 2, _sqlite_time_diff)
         create_deterministic_function('django_timestamp_diff', 2, _sqlite_timestamp_diff)
         create_deterministic_function('django_format_dtdelta', 3, _sqlite_format_dtdelta)
@@ -236,7 +235,6 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         create_deterministic_function('DEGREES', 1, none_guard(math.degrees))
         create_deterministic_function('EXP', 1, none_guard(math.exp))
         create_deterministic_function('FLOOR', 1, none_guard(math.floor))
-        create_deterministic_function('JSON_CONTAINS', 2, _sqlite_json_contains)
         create_deterministic_function('LN', 1, none_guard(math.log))
         create_deterministic_function('LOG', 2, none_guard(lambda x, y: math.log(y, x)))
         create_deterministic_function('LPAD', 3, _sqlite_lpad)
@@ -257,6 +255,9 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         create_deterministic_function('SIN', 1, none_guard(math.sin))
         create_deterministic_function('SQRT', 1, none_guard(math.sqrt))
         create_deterministic_function('TAN', 1, none_guard(math.tan))
+        # Don't use the built-in RANDOM() function because it returns a value
+        # in the range [2^63, 2^63 - 1] instead of [0, 1).
+        conn.create_function('RAND', 0, random.random)
         conn.create_aggregate('STDDEV_POP', 1, list_aggregate(statistics.pstdev))
         conn.create_aggregate('STDDEV_SAMP', 1, list_aggregate(statistics.stdev))
         conn.create_aggregate('VAR_POP', 1, list_aggregate(statistics.pvariance))
@@ -444,8 +445,8 @@ def _sqlite_datetime_parse(dt, tzname=None, conn_tzname=None):
     return dt
 
 
-def _sqlite_date_trunc(lookup_type, dt):
-    dt = _sqlite_datetime_parse(dt)
+def _sqlite_date_trunc(lookup_type, dt, tzname, conn_tzname):
+    dt = _sqlite_datetime_parse(dt, tzname, conn_tzname)
     if dt is None:
         return None
     if lookup_type == 'year':
@@ -462,13 +463,17 @@ def _sqlite_date_trunc(lookup_type, dt):
         return "%i-%02i-%02i" % (dt.year, dt.month, dt.day)
 
 
-def _sqlite_time_trunc(lookup_type, dt):
+def _sqlite_time_trunc(lookup_type, dt, tzname, conn_tzname):
     if dt is None:
         return None
-    try:
-        dt = backend_utils.typecast_time(dt)
-    except (ValueError, TypeError):
-        return None
+    dt_parsed = _sqlite_datetime_parse(dt, tzname, conn_tzname)
+    if dt_parsed is None:
+        try:
+            dt = backend_utils.typecast_time(dt)
+        except (ValueError, TypeError):
+            return None
+    else:
+        dt = dt_parsed
     if lookup_type == 'hour':
         return "%02i:00:00" % dt.hour
     elif lookup_type == 'minute':
@@ -602,11 +607,3 @@ def _sqlite_lpad(text, length, fill_text):
 @none_guard
 def _sqlite_rpad(text, length, fill_text):
     return (text + fill_text * length)[:length]
-
-
-@none_guard
-def _sqlite_json_contains(haystack, needle):
-    target, candidate = json.loads(haystack), json.loads(needle)
-    if isinstance(target, dict) and isinstance(candidate, dict):
-        return target.items() >= candidate.items()
-    return target == candidate
