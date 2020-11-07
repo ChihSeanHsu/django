@@ -2193,10 +2193,21 @@ query. The default is to create all objects in one batch, except for SQLite
 where the default is such that at most 999 variables per query are used.
 
 On databases that support it (all but Oracle), setting the ``ignore_conflicts``
-or ``update_conflicts`` parameter to ``True`` tells the database to ignore failure
-or update to insert any rows that fail constraints such as duplicate unique values. 
-Enabling this parameter disables setting the primary key on each model instance 
-(if the database normally supports it).
+Setting the ``ignore_conflicts`` parameter to ``True`` tells the database to
+ignore failure to insert any rows that fail constraints such as duplicate unique
+values.
+
+Setting the ``update_conflicts`` parameter to ``True`` will apply an upsert
+where a conflicting object's non-unique fields is used to update the row
+which triggered the conflict.
+
+Enabling the ``ignore_conflicts`` or ``update_conflicts`` parameters disable
+setting the primary key on each model instance (if the database normally
+support it).
+
+.. admonition:: Oracle
+
+    ``ignore_conflicts`` and ``update_conflicts`` is not supported on Oracle.
 
 .. warning::
 
