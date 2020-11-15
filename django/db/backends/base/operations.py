@@ -701,7 +701,4 @@ class BaseDatabaseOperations:
         for unique_together in opts.unique_together:
             unique_fields.extend(unique_together)
 
-        for unique_constraint in opts.total_unique_constraints:
-            unique_fields.extend(unique_constraint)
-
         return set(unique_fields)

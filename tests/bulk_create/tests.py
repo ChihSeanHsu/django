@@ -401,6 +401,46 @@ class BulkCreateTests(TestCase):
             self.assertEqual(need_check.will_update, obj.will_update)
             self.assertEqual(need_check.integer_field, obj.integer_field)
 
+    @skipUnlessDBFeature('supports_update_conflicts')
+    def test_update__unique_together(self):
+        data = [
+            UniqueTogether(unique1=1, unique2=1, will_update=False),
+            UniqueTogether(unique1=1, unique2=2, will_update=False),
+            UniqueTogether(unique1=2, unique2=2, will_update=False),
+        ]
+        UniqueTogether.objects.bulk_create(data)
+        self.assertEqual(UniqueTogether.objects.count(), 3)
+        # With update_conflicts=True, conflicts are updated and determine by update_fields.
+        new_objects = [
+            UniqueTogether(unique1=1, unique2=3, will_update=True),
+            UniqueTogether(unique1=2, unique2=3, will_update=True),
+        ]
+        update_objects_1 = [
+            UniqueTogether(unique1=1, unique2=1, will_update=True),
+            UniqueTogether(unique1=1, unique2=2, will_update=True),
+            UniqueTogether(unique1=2, unique2=2, will_update=True),
+        ]
+        UniqueTogether.objects.bulk_create(
+            new_objects, update_conflicts=True,
+            update_fields=['will_update']
+        )
+        UniqueTogether.objects.bulk_create(
+            update_objects_1, update_conflicts=True,
+            update_fields=['will_update']
+        )
+        self.assertEqual(UniqueTogether.objects.count(), 5)
+        # new objs
+        for obj in new_objects:
+            self.assertIsNone(obj.pk)
+            need_check = UniqueTogether.objects.get(unique1=obj.unique1, unique2=obj.unique2)
+            self.assertEqual(need_check.will_update, obj.will_update)
+
+        # if update, data will change.
+        for obj in update_objects_1:
+            self.assertIsNone(obj.pk)
+            need_check = UniqueTogether.objects.get(unique1=obj.unique1, unique2=obj.unique2)
+            self.assertEqual(need_check.will_update, obj.will_update)
+
     @skipIfDBFeature('supports_update_conflicts')
     def test_bulk_create__error(self):
         # Without update_conflicts or ignore_conflicts, there's a problem.
