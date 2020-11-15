@@ -462,19 +462,35 @@ class QuerySet:
                 obj.pk = obj._meta.pk.get_pk_value_on_save(obj)
             obj._prepare_related_fields_for_save(operation_name='bulk_create')
 
-    def _select_on_conflicts(self, ignore_conflicts=False, update_conflicts=False):
+    def _select_on_conflicts(
+        self, ignore_conflicts=False, update_conflicts=False, update_fields=[]
+    ):
         if ignore_conflicts and update_conflicts:
-            raise ValueError(
+            raise IntegrityError(
                 'You can only assign one conflicts plan, ignore_conflicts or update_conflicts'
             )
         result = ON_CONFLICTS_NONE
         if ignore_conflicts:
             result = ON_CONFLICTS_IGNORE
         elif update_conflicts:
+            if not update_fields:
+                raise IntegrityError(
+                    'You need to specify which fields you want to update'
+                )
+            for f in update_fields:
+                try:
+                    self.model._meta.get_field(f)
+                except exceptions.FieldDoesNotExist:
+                    raise IntegrityError(
+                        'Field you specify is not in table: %s' % f
+                    )
             result = ON_CONFLICTS_UPDATE
         return result
 
-    def bulk_create(self, objs, batch_size=None, ignore_conflicts=False, update_conflicts=False):
+    def bulk_create(
+        self, objs, batch_size=None, ignore_conflicts=False,
+        update_conflicts=False, update_fields=[]
+    ):
         """
         Insert each of the instances into the database. Do *not* call
         save() on each of the instances, do not send any pre/post_save
@@ -505,7 +521,8 @@ class QuerySet:
         if not objs:
             return objs
         on_conflicts = self._select_on_conflicts(
-            ignore_conflicts=ignore_conflicts, update_conflicts=update_conflicts
+            ignore_conflicts=ignore_conflicts,
+            update_conflicts=update_conflicts, update_fields=update_fields
         )
         self._for_write = True
         connection = connections[self.db]
@@ -521,6 +538,7 @@ class QuerySet:
                     fields,
                     batch_size,
                     on_conflicts=on_conflicts,
+                    update_fields=update_fields,
                 )
                 for obj_with_pk, results in zip(objs_with_pk, returned_columns):
                     for result, field in zip(results, opts.db_returning_fields):
@@ -536,6 +554,7 @@ class QuerySet:
                     fields,
                     batch_size,
                     on_conflicts=on_conflicts,
+                    update_fields=update_fields,
                 )
                 if (
                     connection.features.can_return_rows_from_bulk_insert and
@@ -1283,7 +1302,7 @@ class QuerySet:
 
     def _insert(
         self, objs, fields, returning_fields=None,
-        raw=False, using=None, on_conflicts=ON_CONFLICTS_NONE
+        raw=False, using=None, on_conflicts=ON_CONFLICTS_NONE, update_fields=[]
     ):
         """
         Insert a new record for the given model. This provides an interface to
@@ -1292,7 +1311,7 @@ class QuerySet:
         self._for_write = True
         if using is None:
             using = self.db
-        query = sql.InsertQuery(self.model, on_conflicts=on_conflicts)
+        query = sql.InsertQuery(self.model, on_conflicts=on_conflicts, update_fields=update_fields)
         query.insert_values(fields, objs, raw=raw)
         return query.get_compiler(using=using).execute_sql(returning_fields)
     _insert.alters_data = True
@@ -1309,7 +1328,10 @@ class QuerySet:
                 'This database backend does not support %s conflicts.' % (feature)
             )
 
-    def _batched_insert(self, objs, fields, batch_size, on_conflicts=ON_CONFLICTS_NONE):
+    def _batched_insert(
+        self, objs, fields, batch_size,
+        on_conflicts=ON_CONFLICTS_NONE, update_fields=[]
+    ):
         """
         Helper method for bulk_create() to insert objs one batch at a time.
         """
@@ -1325,11 +1347,13 @@ class QuerySet:
                     item, fields=fields, using=self.db,
                     returning_fields=self.model._meta.db_returning_fields,
                     on_conflicts=on_conflicts,
+                    update_fields=update_fields,
                 ))
             else:
                 self._insert(
                     item, fields=fields, using=self.db,
-                    on_conflicts=on_conflicts
+                    on_conflicts=on_conflicts,
+                    update_fields=update_fields
                 )
         return inserted_rows
 
@@ -1461,6 +1485,7 @@ class RawQuerySet:
     Provide an iterator which converts the results of raw SQL queries into
     annotated model instances.
     """
+
     def __init__(self, raw_query, model=None, query=None, params=None,
                  translations=None, using=None, hints=None):
         self.raw_query = raw_query
@@ -1967,6 +1992,7 @@ class RelatedPopulator:
     method gets row and from_obj as input and populates the select_related()
     model instance.
     """
+
     def __init__(self, klass_info, select, db):
         self.db = db
         # Pre-compute needed attributes. The attributes are:

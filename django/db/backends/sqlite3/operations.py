@@ -373,16 +373,10 @@ class DatabaseOperations(BaseDatabaseOperations):
             result = 'INSERT OR REPLACE INTO'
         return result if result else super().insert_statement(on_conflicts=on_conflicts)
 
-    def conflicts_suffix_sql(self, fields, on_conflicts=ON_CONFLICTS_NONE):
+    def conflicts_suffix_sql(self, opts, fields, on_conflicts=ON_CONFLICTS_NONE, update_fields=[]):
         result = ''
         if on_conflicts == ON_CONFLICTS_UPDATE and Database.sqlite_version_info >= (3, 24, 0):
-            unique_fields = []
-            update_fields = []
-            for field in fields:
-                if field.unique and not field.primary_key:
-                    unique_fields.append(field.name)
-                else:
-                    update_fields.append(field.name)
+            unique_fields = self._get_unique_fields(opts, fields, update_fields)
             result = 'ON CONFLICT(%s) DO UPDATE SET ' % (', '.join(unique_fields))
             result += ', '.join(['%s=excluded.%s' % (field, field) for field in update_fields])
-        return result if result else super().conflicts_suffix_sql(fields, on_conflicts=on_conflicts)
+        return result if result else super().conflicts_suffix_sql(opts, fields, on_conflicts=on_conflicts, update_fields=[])

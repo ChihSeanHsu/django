@@ -138,11 +138,12 @@ class UpdateQuery(Query):
 class InsertQuery(Query):
     compiler = 'SQLInsertCompiler'
 
-    def __init__(self, *args, on_conflicts=ON_CONFLICTS_NONE, **kwargs):
+    def __init__(self, *args, on_conflicts=ON_CONFLICTS_NONE, update_fields=[], **kwargs):
         super().__init__(*args, **kwargs)
         self.fields = []
         self.objs = []
         self.on_conflicts = on_conflicts
+        self.update_fields = update_fields
 
     def insert_values(self, fields, objs, raw=False):
         self.fields = fields

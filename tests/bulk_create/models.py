@@ -62,7 +62,17 @@ class TwoFields(models.Model):
 
 class UpsertConflict(models.Model):
     unique_field = models.IntegerField(unique=True)
+    integer_field = models.IntegerField()
     will_update = models.BooleanField()
+
+
+class UniqueTogether(models.Model):
+    unique1 = models.IntegerField()
+    unique2 = models.IntegerField()
+    will_update = models.BooleanField()
+
+    class Meta:
+        unique_together = [['unique1', 'unique2']]
 
 
 class NoFields(models.Model):
