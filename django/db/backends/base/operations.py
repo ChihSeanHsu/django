@@ -689,16 +689,5 @@ class BaseDatabaseOperations:
     def insert_statement(self, on_conflicts=None):
         return 'INSERT INTO'
 
-    def conflicts_suffix_sql(self, opts, fields, on_conflicts=None, update_fields=[]):
+    def conflicts_suffix_sql(self, opts, fields, on_conflicts=None, update_fields=[], **kwargs):
         return ''
-
-    def _get_unique_fields(self, opts, fields, update_fields):
-        unique_fields = []
-        for field in fields:
-            if field.unique and not field.primary_key and field.name not in update_fields:
-                unique_fields.append(field.name)
-
-        for unique_together in opts.unique_together:
-            unique_fields.extend(unique_together)
-
-        return set(unique_fields)

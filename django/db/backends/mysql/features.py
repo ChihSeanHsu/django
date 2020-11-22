@@ -49,6 +49,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         'non_default': 'utf8_esperanto_ci',
         'swedish_ci': 'utf8_swedish_ci',
     }
+    supports_update_conflicts_with_unique_fields = False
+    supports_update_conflicts_without_unique_fields = True
 
     @cached_property
     def _mysql_storage_engine(self):

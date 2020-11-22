@@ -383,10 +383,12 @@ class DatabaseOperations(BaseDatabaseOperations):
                 lookup = 'JSON_UNQUOTE(%s)'
         return lookup
 
-    def conflicts_suffix_sql(self, opts, fields, on_conflicts=ON_CONFLICTS_NONE, update_fields=[]):
+    def conflicts_suffix_sql(self, opts, fields, on_conflicts=ON_CONFLICTS_NONE, update_fields=[], **kwargs):
         result = ''
         if on_conflicts == ON_CONFLICTS_UPDATE:
             result = 'ON DUPLICATE KEY UPDATE '
             result += ', '.join(['%s=VALUES(%s)' % (field, field) for field in update_fields])
 
-        return result if result else super().conflicts_suffix_sql(opts, fields, on_conflicts=on_conflicts, update_fields=[])
+        return result if result else super().conflicts_suffix_sql(
+            opts, fields, on_conflicts=on_conflicts, update_fields=[], **kwargs
+        )

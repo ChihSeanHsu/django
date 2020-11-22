@@ -57,7 +57,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     supports_over_clause = True
     supports_frame_range_fixed_distance = True
     supports_ignore_conflicts = False
-    supports_update_conflicts = False
+    supports_update_conflicts_with_unique_fields = False
+    supports_update_conflicts_without_unique_fields = False
     max_query_params = 2**16 - 1
     supports_partial_indexes = False
     supports_slicing_ordering_in_compound = True

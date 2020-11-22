@@ -463,7 +463,7 @@ class QuerySet:
             obj._prepare_related_fields_for_save(operation_name='bulk_create')
 
     def _select_on_conflicts(
-        self, ignore_conflicts=False, update_conflicts=False, update_fields=[]
+        self, ignore_conflicts, update_conflicts, update_fields, unique_fields, unique_constraints
     ):
         if ignore_conflicts and update_conflicts:
             raise IntegrityError(
@@ -489,7 +489,7 @@ class QuerySet:
 
     def bulk_create(
         self, objs, batch_size=None, ignore_conflicts=False,
-        update_conflicts=False, update_fields=[]
+        update_conflicts=False, update_fields=[], unique_fields=[], unique_constraints=''
     ):
         """
         Insert each of the instances into the database. Do *not* call
@@ -522,7 +522,8 @@ class QuerySet:
             return objs
         on_conflicts = self._select_on_conflicts(
             ignore_conflicts=ignore_conflicts,
-            update_conflicts=update_conflicts, update_fields=update_fields
+            update_conflicts=update_conflicts,
+            update_fields=update_fields, unique_fields=unique_fields, unique_constraints=unique_constraints
         )
         self._for_write = True
         connection = connections[self.db]
@@ -539,6 +540,8 @@ class QuerySet:
                     batch_size,
                     on_conflicts=on_conflicts,
                     update_fields=update_fields,
+                    unique_fields=unique_fields,
+                    unique_constraints=unique_constraints
                 )
                 for obj_with_pk, results in zip(objs_with_pk, returned_columns):
                     for result, field in zip(results, opts.db_returning_fields):
@@ -555,6 +558,8 @@ class QuerySet:
                     batch_size,
                     on_conflicts=on_conflicts,
                     update_fields=update_fields,
+                    unique_fields=unique_fields,
+                    unique_constraints=unique_constraints
                 )
                 if (
                     connection.features.can_return_rows_from_bulk_insert and
@@ -1302,7 +1307,8 @@ class QuerySet:
 
     def _insert(
         self, objs, fields, returning_fields=None,
-        raw=False, using=None, on_conflicts=ON_CONFLICTS_NONE, update_fields=[]
+        raw=False, using=None, on_conflicts=ON_CONFLICTS_NONE, update_fields=[],
+        unique_fields=[], unique_constraints=''
     ):
         """
         Insert a new record for the given model. This provides an interface to
@@ -1311,18 +1317,25 @@ class QuerySet:
         self._for_write = True
         if using is None:
             using = self.db
-        query = sql.InsertQuery(self.model, on_conflicts=on_conflicts, update_fields=update_fields)
+        query = sql.InsertQuery(
+            self.model, on_conflicts=on_conflicts, update_fields=update_fields,
+            unique_fields=unique_fields, unique_constraints=unique_constraints
+        )
         query.insert_values(fields, objs, raw=raw)
         return query.get_compiler(using=using).execute_sql(returning_fields)
     _insert.alters_data = True
     _insert.queryset_only = False
 
-    def _check_on_conflicts_supported(self, on_conflicts):
-        feature_flag_mapping = {
-            ON_CONFLICTS_IGNORE: 'supports_ignore_conflicts',
-            ON_CONFLICTS_UPDATE: 'supports_update_conflicts'
-        }
-        feature = feature_flag_mapping.get(on_conflicts)
+    def _check_on_conflicts_supported(self, on_conflicts, unique_fields, unique_constraints):
+        if on_conflicts == ON_CONFLICTS_IGNORE:
+            feature = 'supports_ignore_conflicts'
+        elif on_conflicts == ON_CONFLICTS_UPDATE:
+            if unique_fields or unique_constraints:
+                feature = 'supports_update_conflicts_with_unique_fields'
+            else:
+                feature = 'supports_update_conflicts_without_unique_fields'
+        else:
+            feature = None
         if feature and not getattr(connections[self.db].features, feature):
             raise NotSupportedError(
                 'This database backend does not support %s conflicts.' % (feature)
@@ -1330,12 +1343,12 @@ class QuerySet:
 
     def _batched_insert(
         self, objs, fields, batch_size,
-        on_conflicts=ON_CONFLICTS_NONE, update_fields=[]
+        on_conflicts=ON_CONFLICTS_NONE, update_fields=[], unique_fields=[], unique_constraints=''
     ):
         """
         Helper method for bulk_create() to insert objs one batch at a time.
         """
-        self._check_on_conflicts_supported(on_conflicts)
+        self._check_on_conflicts_supported(on_conflicts, unique_fields, unique_constraints)
         ops = connections[self.db].ops
         max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
         batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size
@@ -1348,12 +1361,16 @@ class QuerySet:
                     returning_fields=self.model._meta.db_returning_fields,
                     on_conflicts=on_conflicts,
                     update_fields=update_fields,
+                    unique_fields=unique_fields,
+                    unique_constraints=unique_constraints
                 ))
             else:
                 self._insert(
                     item, fields=fields, using=self.db,
                     on_conflicts=on_conflicts,
-                    update_fields=update_fields
+                    update_fields=update_fields,
+                    unique_fields=unique_fields,
+                    unique_constraints=unique_constraints
                 )
         return inserted_rows
 

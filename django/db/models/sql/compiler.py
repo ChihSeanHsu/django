@@ -1360,7 +1360,8 @@ class SQLInsertCompiler(SQLCompiler):
         placeholder_rows, param_rows = self.assemble_as_sql(fields, value_rows)
 
         conflicts_suffix_sql = self.connection.ops.conflicts_suffix_sql(
-            opts, fields, on_conflicts=self.query.on_conflicts, update_fields=self.query.update_fields
+            opts, fields, on_conflicts=self.query.on_conflicts, update_fields=self.query.update_fields,
+            unique_fields=self.query.unique_fields, unique_constraints=self.query.unique_constraints
         )
         if self.returning_fields and self.connection.features.can_return_columns_from_insert:
             if self.connection.features.can_return_rows_from_bulk_insert:
