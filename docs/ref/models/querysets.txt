@@ -2152,7 +2152,7 @@ exists in the database, an :exc:`~django.db.IntegrityError` is raised.
 ``bulk_create()``
 ~~~~~~~~~~~~~~~~~
 
-.. method:: bulk_create(objs, batch_size=None, ignore_conflicts=False, update_conflicts=False)
+.. method:: bulk_create(objs, batch_size=None, ignore_conflicts=False, update_conflicts=False, unique_fields=[], update_fields=[])
 
 This method inserts the provided list of objects into the database in an
 efficient manner (generally only 1 query, no matter how many objects there
@@ -2197,9 +2197,20 @@ Setting the ``ignore_conflicts`` parameter to ``True`` tells the database to
 ignore failure to insert any rows that fail constraints such as duplicate unique
 values.
 
-Setting the ``update_conflicts`` parameter to ``True`` will apply an upsert
+.. versionchanged:: 3.2
+SSetting the ``update_conflicts`` parameter to ``True``, ``unique_fields`` parameter
+to which fields are unique and ``update_fields`` parameter
+to which fields you want to update will apply an upsert
 where a conflicting object's non-unique fields is used to update the row
 which triggered the conflict.
+
+* If you use mysql and sqlite(< 3.24.0) as your database,
+you need to set update_conflicts to True and which fields you want to update.
+And it will update automatically.
+
+* If you use postgresql and sqlite(< 3.24.0) as your database,
+you eed to set update_conflicts to True, specify which fields are unique(by constraints) and
+which fields you want to update.
 
 Enabling the ``ignore_conflicts`` or ``update_conflicts`` parameters disable
 setting the primary key on each model instance (if the database normally
