@@ -5,7 +5,7 @@ from django.db import IntegrityError, NotSupportedError, connection
 from django.db.models import FileField, Value
 from django.db.models.functions import Lower
 from django.test import (
-    TestCase, override_settings, skipIfDBFeature, skipUnlessDBFeature,
+    TestCase, override_settings, skipIfDBFeature, skipUnlessDBFeature, skipUnlessAnyDBFeature
 )
 
 from .models import (
@@ -409,86 +409,82 @@ class BulkCreateTests(TestCase):
     def test_update__with_unique_fields(self):
         self._test_update(unique_fields=['unique_field'])
 
-    # @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
-    # def test_update__unique_together(self):
-    #     data = [
-    #         UniqueTogether(unique1=1, unique2=1, will_update=False),
-    #         UniqueTogether(unique1=1, unique2=2, will_update=False),
-    #         UniqueTogether(unique1=2, unique2=2, will_update=False),
-    #     ]
-    #     UniqueTogether.objects.bulk_create(data)
-    #     self.assertEqual(UniqueTogether.objects.count(), 3)
-    #     # With update_conflicts=True, conflicts are updated and determine by update_fields.
-    #     new_objects = [
-    #         UniqueTogether(unique1=1, unique2=3, will_update=True),
-    #         UniqueTogether(unique1=2, unique2=3, will_update=True),
-    #     ]
-    #     update_objects_1 = [
-    #         UniqueTogether(unique1=1, unique2=1, will_update=True),
-    #         UniqueTogether(unique1=1, unique2=2, will_update=True),
-    #         UniqueTogether(unique1=2, unique2=2, will_update=True),
-    #     ]
-    #     UniqueTogether.objects.bulk_create(
-    #         new_objects, update_conflicts=True,
-    #         update_fields=['will_update']
-    #     )
-    #     UniqueTogether.objects.bulk_create(
-    #         update_objects_1, update_conflicts=True,
-    #         update_fields=['will_update']
-    #     )
-    #     self.assertEqual(UniqueTogether.objects.count(), 5)
-    #     # new objs
-    #     for obj in new_objects:
-    #         self.assertIsNone(obj.pk)
-    #         need_check = UniqueTogether.objects.get(unique1=obj.unique1, unique2=obj.unique2)
-    #         self.assertEqual(need_check.will_update, obj.will_update)
-    #
-    #     # if update, data will change.
-    #     for obj in update_objects_1:
-    #         self.assertIsNone(obj.pk)
-    #         need_check = UniqueTogether.objects.get(unique1=obj.unique1, unique2=obj.unique2)
-    #         self.assertEqual(need_check.will_update, obj.will_update)
-    #
-    # @skipIfDBFeature('supports_update_conflicts')
-    # def test_bulk_create__error(self):
-    #     # Without update_conflicts or ignore_conflicts, there's a problem.
-    #     with self.assertRaises(IntegrityError):
-    #         TwoFields.objects.bulk_create(
-    #             self.data,
-    #         )
-    #
-    #     # Using update_conflict but without update_fields, there's a problem.
-    #     msg = 'You need to specify which fields you want to update'
-    #     with self.assertRaisesMessage(IntegrityError, msg):
-    #         TwoFields.objects.bulk_create(self.data, update_conflicts=True)
-    #
-    #     # Using update_conflict but without update_fields, there's a problem.
-    #     field = 'test'
-    #     msg = 'Field you specify is not in table: test'
-    #     with self.assertRaisesMessage(IntegrityError, msg):
-    #         TwoFields.objects.bulk_create(self.data, update_conflicts=True, update_fields=[field])
-    #
-    # @skipIfDBFeature('supports_update_conflicts')
-    # def test_bulk_create__unique_fields_error(self):
-    #     # Without update_conflicts or ignore_conflicts, there's a problem.
-    #     with self.assertRaises(IntegrityError):
-    #         TwoFields.objects.bulk_create(
-    #             self.data,
-    #         )
-    #
-    #     # Using update_conflict but without update_fields, there's a problem.
-    #     msg = 'You need to specify which fields you want to update'
-    #     with self.assertRaisesMessage(IntegrityError, msg):
-    #         TwoFields.objects.bulk_create(self.data, update_conflicts=True)
-    #
-    #     # Using update_conflict but without update_fields, there's a problem.
-    #     field = 'test'
-    #     msg = 'Field you specify is not in table: test'
-    #     with self.assertRaisesMessage(IntegrityError, msg):
-    #         TwoFields.objects.bulk_create(self.data, update_conflicts=True, update_fields=[field])
+    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
+    def test_update__unique_together(self):
+        data = [
+            UniqueTogether(unique_together1=1, unique_together2=1, will_update=False),
+            UniqueTogether(unique_together1=1, unique_together2=2, will_update=False),
+            UniqueTogether(unique_together1=2, unique_together2=2, will_update=False),
+        ]
+        UniqueTogether.objects.bulk_create(data)
+        self.assertEqual(UniqueTogether.objects.count(), 3)
+        # With update_conflicts=True, conflicts are updated and determine by update_fields.
+        new_objects = [
+            UniqueTogether(unique_together1=1, unique_together2=3, will_update=True),
+            UniqueTogether(unique_together1=2, unique_together2=3, will_update=True),
+        ]
+        update_objects_1 = [
+            UniqueTogether(unique_together1=1, unique_together2=1, will_update=True),
+            UniqueTogether(unique_together1=1, unique_together2=2, will_update=True),
+            UniqueTogether(unique_together1=2, unique_together2=2, will_update=True),
+        ]
+        UniqueTogether.objects.bulk_create(
+            new_objects, update_conflicts=True,
+            unique_fields=['unique_together1', 'unique_together2'], update_fields=['will_update']
+        )
+        UniqueTogether.objects.bulk_create(
+            update_objects_1, update_conflicts=True,
+            unique_fields=['unique_together1', 'unique_together2'], update_fields=['will_update']
+        )
+        self.assertEqual(UniqueTogether.objects.count(), 5)
+        # new objs
+        for obj in new_objects:
+            self.assertIsNone(obj.pk)
+            need_check = UniqueTogether.objects.get(
+                unique_together1=obj.unique_together1, unique_together2=obj.unique_together2
+            )
+            self.assertEqual(need_check.will_update, obj.will_update)
 
-    @skipUnlessDBFeature('supports_update_conflicts')
-    @skipUnlessDBFeature('supports_ignore_conflicts')
+        # if update, data will change.
+        for obj in update_objects_1:
+            self.assertIsNone(obj.pk)
+            need_check = UniqueTogether.objects.get(
+                unique_together1=obj.unique_together1, unique_together2=obj.unique_together2
+            )
+            self.assertEqual(need_check.will_update, obj.will_update)
+
+    @skipUnlessDBFeature('supports_update_conflicts_without_unique_fields')
+    def test_bulk_create__update_fields_error__without_unique(self):
+        # Using update_conflict but without update_fields, there's a problem.
+        msg = 'You need to specify which fields you want to update'
+        with self.assertRaisesMessage(IntegrityError, msg):
+            TwoFields.objects.bulk_create(self.data, update_conflicts=True)
+
+        # Using update_conflict but without update_fields, there's a problem.
+        field = 'test'
+        msg = 'Field you specify is not in table: test'
+        with self.assertRaisesMessage(IntegrityError, msg):
+            TwoFields.objects.bulk_create(self.data, update_conflicts=True, update_fields=[field])
+
+    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
+    def test_bulk_create__update_fields_error__with_unique(self):
+        # Using update_conflict but without update_fields, there's a problem.
+        msg = 'You need to specify which fields you want to update'
+        with self.assertRaisesMessage(IntegrityError, msg):
+            TwoFields.objects.bulk_create(self.data, update_conflicts=True, unique_fields=['name'])
+
+        # Using update_conflict but without update_fields, there's a problem.
+        field = 'test'
+        msg = 'Field you specify is not in table: test'
+        with self.assertRaisesMessage(IntegrityError, msg):
+            TwoFields.objects.bulk_create(
+                self.data, update_conflicts=True, unique_fields=['name'], update_fields=[field]
+            )
+
+    @skipUnlessAnyDBFeature(
+        'supports_ignore_conflicts', 'supports_update_conflicts_with_unique_fields',
+        'supports_update_conflicts_without_unique_fields'
+    )
     def test_bulk_create_on_conflicts_conflict(self):
         message = 'You can only assign one conflicts plan, ignore_conflicts or update_conflicts'
         with self.assertRaisesMessage(IntegrityError, message):

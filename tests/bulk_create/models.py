@@ -67,8 +67,8 @@ class UpsertConflict(models.Model):
 
 
 class UniqueTwo(models.Model):
-    unique1 = models.IntegerField()
-    unique2 = models.IntegerField()
+    unique1 = models.IntegerField(unique=True)
+    unique2 = models.IntegerField(unique=True)
     will_update = models.BooleanField()
 
 
