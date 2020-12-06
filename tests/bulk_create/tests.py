@@ -1,11 +1,11 @@
 from math import ceil
 from operator import attrgetter
 
-from django.db import IntegrityError, NotSupportedError, connection, OperationalError, ProgrammingError
+from django.db import IntegrityError, NotSupportedError, OperationalError, ProgrammingError, connection
 from django.db.models import FileField, Value
 from django.db.models.functions import Lower
 from django.test import (
-    TestCase, override_settings, skipIfDBFeature, skipUnlessDBFeature, skipUnlessAnyDBFeature
+    TestCase, override_settings, skipIfDBFeature, skipUnlessAnyDBFeature, skipUnlessDBFeature
 )
 
 from .models import (
