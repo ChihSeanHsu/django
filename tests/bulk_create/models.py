@@ -66,13 +66,19 @@ class UpsertConflict(models.Model):
     will_update = models.BooleanField()
 
 
-class UniqueTogether(models.Model):
+class UniqueTwo(models.Model):
     unique1 = models.IntegerField()
     unique2 = models.IntegerField()
     will_update = models.BooleanField()
 
+
+class UniqueTogether(models.Model):
+    unique_together1 = models.IntegerField()
+    unique_together2 = models.IntegerField()
+    will_update = models.BooleanField()
+
     class Meta:
-        unique_together = [['unique1', 'unique2']]
+        unique_together = [['unique_together1', 'unique_together2']]
 
 
 class NoFields(models.Model):

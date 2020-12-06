@@ -11,8 +11,8 @@ from django.test import (
 from .models import (
     BigAutoFieldModel, Country, NoFields, NullableFields, Pizzeria,
     ProxyCountry, ProxyMultiCountry, ProxyMultiProxyCountry, ProxyProxyCountry,
-    Restaurant, SmallAutoFieldModel, State, TwoFields, UpsertConflict,
-    UniqueTogether, UniqueTwo
+    Restaurant, SmallAutoFieldModel, State, TwoFields, UniqueTogether,
+    UniqueTwo, UpsertConflict,
 )
 
 
