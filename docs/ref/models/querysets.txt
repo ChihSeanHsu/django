@@ -2198,19 +2198,19 @@ ignore failure to insert any rows that fail constraints such as duplicate unique
 values.
 
 .. versionchanged:: 3.2
-Setting the ``update_conflicts`` parameter to ``True``, ``unique_fields`` parameter
-to which fields are unique and ``update_fields`` parameter
-to which fields you want to update will apply an upsert
-where a conflicting object's non-unique fields is used to update the row
-which triggered the conflict.
+Setting the ``update_conflicts`` parameter to ``True``,
+``unique_fields`` parameter to which fields are unique and
+``update_fields`` parameter to which fields you want to update,
+while on conflict it will update ``update_fields`` by ``unique_fields``.
+
 
 * If you use mysql and sqlite(< 3.24.0) as your database,
-you need to set update_conflicts to True and which fields you want to update.
-And it will update automatically.
+  you need to set update_conflicts to True and which fields you want to update.
+  And it will update automatically.
 
 * If you use postgresql and sqlite(< 3.24.0) as your database,
-you need to set update_conflicts to True, specify which fields are unique(by constraints) and
-which fields you want to update.
+  you need to set update_conflicts to True, specify which fields are unique(by constraints) and
+  which fields you want to update.
 
 Enabling the ``ignore_conflicts`` or ``update_conflicts`` parameters disable
 setting the primary key on each model instance (if the database normally

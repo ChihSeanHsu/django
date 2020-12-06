@@ -49,6 +49,8 @@ class DatabaseFeatures(BaseDatabaseFeatures):
         'cs': 'binary',
         'non_default': 'nocase',
     }
+    supports_update_conflicts_with_unique_fields = Database.sqlite_version_info >= (3, 24, 0)
+    supports_update_conflicts_without_unique_fields = Database.sqlite_version_info < (3, 24, 0)
 
     @cached_property
     def supports_atomic_references_rename(self):
