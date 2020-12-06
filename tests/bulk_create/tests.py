@@ -1,7 +1,7 @@
 from math import ceil
 from operator import attrgetter
 
-from django.db import IntegrityError, NotSupportedError, connection, OperationalError
+from django.db import IntegrityError, NotSupportedError, connection, OperationalError, ProgrammingError
 from django.db.models import FileField, Value
 from django.db.models.functions import Lower
 from django.test import (
@@ -462,9 +462,11 @@ class BulkCreateTests(TestCase):
 
     @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
     def test_update__unique_together__with_unique__error(self):
-        msg = 'ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint'
-        with self.assertRaisesMessage(OperationalError, msg):
+        with self.assertRaises((OperationalError, ProgrammingError),):
             self._test_update_together(unique_fields=['unique_together1'])
+
+        with self.assertRaises((OperationalError, ProgrammingError),):
+            self._test_update_together(unique_fields=[])
 
     @skipUnlessDBFeature('supports_update_conflicts_without_unique_fields')
     def test_bulk_create__update_fields_error__without_unique(self):
