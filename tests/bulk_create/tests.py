@@ -468,6 +468,69 @@ class BulkCreateTests(TestCase):
         with self.assertRaises((OperationalError, ProgrammingError),):
             self._test_update_together(unique_fields=[])
 
+    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
+    def test_update__unique_two_fields(self):
+        data = [
+            UniqueTwo(unique1=1, unique2=1, will_update=False),
+            UniqueTwo(unique1=2, unique2=2, will_update=False),
+        ]
+        UniqueTwo.objects.bulk_create(data)
+        self.assertEqual(UniqueTwo.objects.count(), 2)
+        new_objects = [
+            UniqueTwo(unique1=1, unique2=1, will_update=True),
+            UniqueTwo(unique1=2, unique2=2, will_update=True),
+        ]
+
+        UniqueTwo.objects.bulk_create(
+            new_objects, update_conflicts=True,
+            unique_fields=['unique1'], update_fields=['will_update']
+        )
+        self.assertEqual(UniqueTwo.objects.count(), 2)
+        # new objs
+        for obj in new_objects:
+            self.assertIsNone(obj.pk)
+            need_check = UniqueTwo.objects.get(
+                unique1=obj.unique1, unique2=obj.unique2
+            )
+            self.assertEqual(need_check.will_update, obj.will_update)
+
+        new_objects_2 = [
+            UniqueTwo(unique1=3, unique2=1, will_update=True),
+            UniqueTwo(unique1=4, unique2=2, will_update=True),
+        ]
+
+        UniqueTwo.objects.bulk_create(
+            new_objects, update_conflicts=True,
+            unique_fields=['unique2'], update_fields=['will_update']
+        )
+        self.assertEqual(UniqueTwo.objects.count(), 2)
+        # new objs
+        for obj in new_objects:
+            self.assertIsNone(obj.pk)
+            need_check = UniqueTwo.objects.get(
+                unique1=obj.unique1, unique2=obj.unique2
+            )
+            self.assertEqual(need_check.will_update, obj.will_update)
+
+    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
+    def test_update__unique_two_fields__error(self):
+        data = [
+            UniqueTwo(unique1=1, unique2=1, will_update=False),
+            UniqueTwo(unique1=2, unique2=2, will_update=False),
+        ]
+        UniqueTwo.objects.bulk_create(data)
+        self.assertEqual(UniqueTwo.objects.count(), 2)
+        new_objects = [
+            UniqueTwo(unique1=1, unique2=1, will_update=True),
+            UniqueTwo(unique1=2, unique2=2, will_update=True),
+        ]
+
+        with self.assertRaises((OperationalError, ProgrammingError), ):
+            UniqueTwo.objects.bulk_create(
+                new_objects, update_conflicts=True,
+                unique_fields=['unique1', 'unique2'], update_fields=['will_update']
+            )
+
     @skipUnlessDBFeature('supports_update_conflicts_without_unique_fields')
     def test_bulk_create__update_fields_error__without_unique(self):
         # Using update_conflict but without update_fields, there's a problem.
