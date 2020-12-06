@@ -1,7 +1,7 @@
 from math import ceil
 from operator import attrgetter
 
-from django.db import IntegrityError, NotSupportedError, connection
+from django.db import IntegrityError, NotSupportedError, connection, OperationalError
 from django.db.models import FileField, Value
 from django.db.models.functions import Lower
 from django.test import (
@@ -409,8 +409,7 @@ class BulkCreateTests(TestCase):
     def test_update__with_unique_fields(self):
         self._test_update(unique_fields=['unique_field'])
 
-    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
-    def test_update__unique_together(self):
+    def _test_update_together(self, **kwargs):
         data = [
             UniqueTogether(unique_together1=1, unique_together2=1, will_update=False),
             UniqueTogether(unique_together1=1, unique_together2=2, will_update=False),
@@ -430,11 +429,11 @@ class BulkCreateTests(TestCase):
         ]
         UniqueTogether.objects.bulk_create(
             new_objects, update_conflicts=True,
-            unique_fields=['unique_together1', 'unique_together2'], update_fields=['will_update']
+            update_fields=['will_update'], **kwargs
         )
         UniqueTogether.objects.bulk_create(
             update_objects_1, update_conflicts=True,
-            unique_fields=['unique_together1', 'unique_together2'], update_fields=['will_update']
+            update_fields=['will_update'], **kwargs
         )
         self.assertEqual(UniqueTogether.objects.count(), 5)
         # new objs
@@ -452,6 +451,20 @@ class BulkCreateTests(TestCase):
                 unique_together1=obj.unique_together1, unique_together2=obj.unique_together2
             )
             self.assertEqual(need_check.will_update, obj.will_update)
+
+    @skipUnlessDBFeature('supports_update_conflicts_without_unique_fields')
+    def test_update__unique_together__without_unique(self):
+        self._test_update_together()
+
+    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
+    def test_update__unique_together__with_unique(self):
+        self._test_update_together(unique_fields=['unique_together1', 'unique_together2'])
+
+    @skipUnlessDBFeature('supports_update_conflicts_with_unique_fields')
+    def test_update__unique_together__with_unique__error(self):
+        msg = 'ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint'
+        with self.assertRaisesMessage(OperationalError, msg):
+            self._test_update_together(unique_fields=['unique_together1'])
 
     @skipUnlessDBFeature('supports_update_conflicts_without_unique_fields')
     def test_bulk_create__update_fields_error__without_unique(self):
