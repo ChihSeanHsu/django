@@ -183,8 +183,7 @@ class Field(RegisterLookupMixin):
         if not hasattr(self, 'model'):
             return super().__str__()
         model = self.model
-        app = model._meta.app_label
-        return '%s.%s.%s' % (app, model._meta.object_name, self.name)
+        return '%s.%s' % (model._meta.label, self.name)
 
     def __repr__(self):
         """Display the module, class, and name of the field."""
@@ -1864,6 +1863,13 @@ class BigIntegerField(IntegerField):
         })
 
 
+class SmallIntegerField(IntegerField):
+    description = _('Small integer')
+
+    def get_internal_type(self):
+        return 'SmallIntegerField'
+
+
 class IPAddressField(Field):
     empty_strings_allowed = False
     description = _("IPv4 address")
@@ -1981,13 +1987,13 @@ class NullBooleanField(BooleanField):
         'invalid_nullable': _('“%(value)s” value must be either None, True or False.'),
     }
     description = _("Boolean (Either True, False or None)")
-    system_check_deprecated_details = {
+    system_check_removed_details = {
         'msg': (
-            'NullBooleanField is deprecated. Support for it (except in '
-            'historical migrations) will be removed in Django 4.0.'
+            'NullBooleanField is removed except for support in historical '
+            'migrations.'
         ),
         'hint': 'Use BooleanField(null=True) instead.',
-        'id': 'fields.W903',
+        'id': 'fields.E903',
     }
 
     def __init__(self, *args, **kwargs):
@@ -2006,6 +2012,17 @@ class NullBooleanField(BooleanField):
 
 
 class PositiveIntegerRelDbTypeMixin:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not hasattr(cls, 'integer_field_class'):
+            cls.integer_field_class = next(
+                (
+                    parent
+                    for parent in cls.__mro__[1:]
+                    if issubclass(parent, IntegerField)
+                ),
+                None,
+            )
 
     def rel_db_type(self, connection):
         """
@@ -2019,10 +2036,10 @@ class PositiveIntegerRelDbTypeMixin:
         if connection.features.related_fields_match_type:
             return self.db_type(connection)
         else:
-            return IntegerField().db_type(connection=connection)
+            return self.integer_field_class().db_type(connection=connection)
 
 
-class PositiveBigIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField):
+class PositiveBigIntegerField(PositiveIntegerRelDbTypeMixin, BigIntegerField):
     description = _('Positive big integer')
 
     def get_internal_type(self):
@@ -2048,7 +2065,7 @@ class PositiveIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField):
         })
 
 
-class PositiveSmallIntegerField(PositiveIntegerRelDbTypeMixin, IntegerField):
+class PositiveSmallIntegerField(PositiveIntegerRelDbTypeMixin, SmallIntegerField):
     description = _("Positive small integer")
 
     def get_internal_type(self):
@@ -2092,13 +2109,6 @@ class SlugField(CharField):
             'allow_unicode': self.allow_unicode,
             **kwargs,
         })
-
-
-class SmallIntegerField(IntegerField):
-    description = _("Small integer")
-
-    def get_internal_type(self):
-        return "SmallIntegerField"
 
 
 class TextField(Field):
