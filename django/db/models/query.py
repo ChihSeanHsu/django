@@ -471,8 +471,10 @@ class QuerySet:
             )
         result = ON_CONFLICTS_NONE
         if ignore_conflicts:
+            self._check_on_conflicts_supported(ON_CONFLICTS_IGNORE, unique_fields)
             result = ON_CONFLICTS_IGNORE
         elif update_conflicts:
+            self._check_on_conflicts_supported(ON_CONFLICTS_UPDATE, unique_fields)
             if not update_fields:
                 raise IntegrityError(
                     'You need to specify which fields you want to update'
@@ -1347,7 +1349,6 @@ class QuerySet:
         """
         Helper method for bulk_create() to insert objs one batch at a time.
         """
-        self._check_on_conflicts_supported(on_conflicts, unique_fields)
         ops = connections[self.db].ops
         max_batch_size = max(ops.bulk_batch_size(fields, objs), 1)
         batch_size = min(batch_size, max_batch_size) if batch_size else max_batch_size

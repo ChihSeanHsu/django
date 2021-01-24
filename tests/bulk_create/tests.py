@@ -329,8 +329,7 @@ class BulkCreateTests(TestCase):
 
     @skipIfDBFeature('supports_update_conflicts_with_unique_fields', 'supports_update_conflicts_without_unique_fields')
     def test_update_value_error(self):
-        message = 'This database backend does not support update.'
-        with self.assertRaisesMessage(NotSupportedError, message):
+        with self.assertRaises(NotSupportedError):
             TwoFields.objects.bulk_create(self.data, update_conflicts=True)
 
     def _test_update(self, **kwargs):
